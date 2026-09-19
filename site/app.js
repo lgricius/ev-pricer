@@ -433,6 +433,7 @@
 
   // ------------------------------------------------------------- geolocation
   // Position lives only in memory for this page view: it is never stored, never put in the URL.
+  const DEFAULT_RADIUS_KM = 10;
   const geo = { position: null, approximate: false, radiusKm: 0, prevSort: null };
   let allStations = [];
   const toRad = x => x * Math.PI / 180;
@@ -449,6 +450,7 @@
     const { latitude: lat, longitude: lon, accuracy } = pos.coords;
     const first = !geo.position;
     geo.position = { lat, lon };
+    if (first) { geo.radiusKm = DEFAULT_RADIUS_KM; els.radius.value = String(DEFAULT_RADIUS_KM); } // start with a sensible radius; user can widen it
     geo.approximate = Number.isFinite(accuracy) && accuracy > 2000;
     for (const s of allStations) s.distance = s.lat !== null && s.lon !== null ? haversineKm(lat, lon, s.lat, s.lon) : null;
     els.nearMe.classList.add('active');

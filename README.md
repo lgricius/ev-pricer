@@ -12,8 +12,8 @@ by a GitHub Actions workflow every hour and published to GitHub Pages.
 - **Map view**: List / Map toggle (`view=map` in the URL). Leaflet with OpenStreetMap tiles, loaded only when the map
   is first opened. Stations are clustered and colored by €/kWh; a marker popup shows the key facts with Details and
   Directions buttons. The map shows exactly what the current filters select, and centers on you after "Near me".
-- **Near me**: on click only, asks the browser for your location, adds a distance column, sorts by it and offers a
-  5/10/25/50 km radius filter. The position stays in memory for the page view; it is never stored or put in the URL.
+- **Near me**: on click only, asks the browser for your location, adds a distance column, sorts by it and filters to
+  10 km by default (5/10/25/50 km or any distance selectable). The position stays in memory for the page view; it is never stored or put in the URL.
 - Filters, sorting and the open station live in the URL query string, so any view can be bookmarked or shared.
 - The browser caches the data for 15 minutes; the **Refresh** button forces a re-download.
 
