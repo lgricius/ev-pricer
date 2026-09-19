@@ -19,6 +19,7 @@
     <div class="status" id="status">
       <span id="status-text">Loading…</span>
       <button id="refresh" type="button" title="Re-download the data now (cache TTL 15 min)">↻ Refresh</button>
+      <button id="prefs-open" type="button" class="secondary" title="Preferences: default filters, radius and view" aria-label="Preferences">⚙</button>
     </div>
   </header>
 
@@ -44,7 +45,7 @@
     <label class="grow">Search
       <input id="f-q" type="search" placeholder="Address, station ID, owner…">
     </label>
-    <button id="reset" type="button" class="secondary" title="Clear all filters and sorting">Reset</button>
+    <button id="reset" type="button" class="secondary" title="Back to your default filters and sorting">Reset</button>
   </section>
 
   <div class="meta">
@@ -71,6 +72,57 @@
 
   <main id="table" aria-label="Charging stations"></main>
   <section id="map" class="hidden" aria-label="Map of charging stations"></section>
+
+  <dialog id="prefs" aria-labelledby="prefs-title">
+    <form method="dialog" id="prefs-form">
+      <div class="detail-head">
+        <div>
+          <h2 id="prefs-title">Preferences</h2>
+          <p class="sub">Saved in this browser. Applied when you open the site without filters in the link.</p>
+        </div>
+        <button type="button" class="secondary" id="prefs-close" aria-label="Close">✕</button>
+      </div>
+      <div class="prefs-body">
+        <label class="pref">Default “Near me” radius
+          <select name="radiusKm">
+            <option value="5">5 km</option>
+            <option value="10">10 km</option>
+            <option value="25">25 km</option>
+            <option value="50">50 km</option>
+            <option value="0">any distance</option>
+          </select>
+        </label>
+        <label class="pref">Default min kW
+          <input name="kw" type="number" min="0" step="1" placeholder="none" inputmode="numeric">
+        </label>
+        <label class="pref">Default max €/kWh
+          <input name="price" type="number" min="0" step="0.01" placeholder="none" inputmode="decimal">
+        </label>
+        <fieldset class="pref">
+          <legend>Default connectors</legend>
+          <label><input type="checkbox" name="types" value="CCS"> CCS</label>
+          <label><input type="checkbox" name="types" value="CHAdeMO"> CHAdeMO</label>
+          <label><input type="checkbox" name="types" value="Type 2"> Type 2</label>
+        </fieldset>
+        <fieldset class="pref">
+          <legend>Default current</legend>
+          <label><input type="checkbox" name="current" value="AC"> AC</label>
+          <label><input type="checkbox" name="current" value="DC"> DC</label>
+        </fieldset>
+        <fieldset class="pref">
+          <legend>Default view</legend>
+          <label><input type="radio" name="view" value="list" checked> List</label>
+          <label><input type="radio" name="view" value="map"> Map</label>
+        </fieldset>
+        <label class="pref check"><input type="checkbox" name="autoLocate"> Locate me automatically when the page opens (your browser will ask for permission once)</label>
+        <div class="prefs-actions">
+          <button type="submit" id="prefs-save">Save</button>
+          <button type="button" class="secondary" id="prefs-clear" title="Forget all preferences">Clear preferences</button>
+          <button type="button" class="secondary danger" id="prefs-reset-reload" title="Clear all filters, drop the cached data and reload the page">↺ Reset filters &amp; reload</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="detail" aria-labelledby="detail-title">
     <div class="detail-head">

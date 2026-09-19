@@ -37,6 +37,19 @@
     catch (e) { console.warn('Cache write failed', e); }
   }
 
+  // ------------------------------------------------------------ preferences
+  // Personal defaults, kept in this browser's localStorage (a static site has no server to read cookies).
+  const PREFS_KEY = 'ev-pricer:prefs:v1';
+  const PREFS_DEFAULTS = { radiusKm: 10, kw: '', price: '', types: [], current: [], view: 'list', autoLocate: false };
+  function loadPrefs() {
+    try { return { ...PREFS_DEFAULTS, ...(JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')) }; }
+    catch { return { ...PREFS_DEFAULTS }; }
+  }
+  function savePrefs(p) {
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch (e) { console.warn('Could not save preferences', e); }
+  }
+  let prefs = loadPrefs();
+
   async function fetchData(force) {
     const res = await fetch(DATA_URL + (force ? `?t=${Date.now()}` : ''), { cache: force ? 'reload' : 'no-cache' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -86,18 +99,28 @@
   const state = { city: [], network: [], type: [], current: [], kw: '', price: '', q: '', sort: [], station: '', view: 'list' };
   const LIST_KEYS = ['city', 'network', 'type', 'current'];
 
+  const FILTER_PARAMS = [...LIST_KEYS, 'kw', 'price', 'q'];
   function readUrl() {
     const p = new URLSearchParams(location.search);
+    const hasFilters = FILTER_PARAMS.some(k => p.has(k));
     for (const k of LIST_KEYS) state[k] = p.getAll(k).filter(Boolean);
     state.kw = p.get('kw') ?? '';
     state.price = p.get('price') ?? '';
     state.q = p.get('q') ?? '';
     state.station = p.get('station') ?? '';
-    state.view = p.get('view') === 'map' ? 'map' : 'list';
+    state.view = p.has('view') ? (p.get('view') === 'map' ? 'map' : 'list') : prefs.view;
+    if (!hasFilters) applyDefaultFilters();
     state.sort = (p.get('sort') ?? '').split(',').filter(Boolean).map(s => {
       const [column, dir = 'asc'] = s.split(':');
       return { column, dir: dir === 'desc' ? 'desc' : 'asc' };
     });
+  }
+  function applyDefaultFilters() {
+    state.city = []; state.network = []; state.q = '';
+    state.type = [...prefs.types];
+    state.current = [...prefs.current];
+    state.kw = prefs.kw ? String(prefs.kw) : '';
+    state.price = prefs.price ? String(prefs.price) : '';
   }
   function writeUrl() {
     const p = new URLSearchParams();
@@ -194,8 +217,7 @@
   els.price.addEventListener('input', debounce(() => { state.price = els.price.value.trim(); applyFilters(); }, 150));
   els.q.addEventListener('input', debounce(() => { state.q = els.q.value; applyFilters(); }, 150));
   els.reset.addEventListener('click', () => {
-    for (const k of LIST_KEYS) state[k] = [];
-    state.kw = state.price = state.q = '';
+    applyDefaultFilters();
     state.sort = [];
     syncInputsFromState();
     whenReady(() => table.setSort(geo.position ? [{ column: 'distance', dir: 'asc' }] : sortersFor([])));
@@ -366,6 +388,55 @@
   els.viewList.addEventListener('click', () => setView('list'));
   els.viewMap.addEventListener('click', () => setView('map'));
 
+  // -------------------------------------------------------- preferences UI
+  const prefsDlg = $('prefs'), prefsForm = $('prefs-form');
+  function fillPrefsForm() {
+    const f = prefsForm.elements;
+    f.radiusKm.value = String(+prefs.radiusKm || 0);
+    f.kw.value = prefs.kw || '';
+    f.price.value = prefs.price || '';
+    for (const el of prefsForm.querySelectorAll('input[name=types]')) el.checked = prefs.types.includes(el.value);
+    for (const el of prefsForm.querySelectorAll('input[name=current]')) el.checked = prefs.current.includes(el.value);
+    for (const el of prefsForm.querySelectorAll('input[name=view]')) el.checked = el.value === prefs.view;
+    f.autoLocate.checked = !!prefs.autoLocate;
+  }
+  function readPrefsForm() {
+    const f = prefsForm.elements;
+    return {
+      radiusKm: +f.radiusKm.value || 0,
+      kw: f.kw.value.trim(),
+      price: f.price.value.trim(),
+      types: [...prefsForm.querySelectorAll('input[name=types]:checked')].map(e => e.value),
+      current: [...prefsForm.querySelectorAll('input[name=current]:checked')].map(e => e.value),
+      view: prefsForm.querySelector('input[name=view]:checked')?.value === 'map' ? 'map' : 'list',
+      autoLocate: f.autoLocate.checked,
+    };
+  }
+  $('prefs-open').addEventListener('click', () => { fillPrefsForm(); prefsDlg.showModal(); });
+  $('prefs-close').addEventListener('click', () => prefsDlg.close());
+  prefsDlg.addEventListener('click', e => { if (e.target === prefsDlg) prefsDlg.close(); });
+  prefsForm.addEventListener('submit', e => {
+    e.preventDefault();
+    prefs = readPrefsForm();
+    savePrefs(prefs);
+    // apply right away: filters back to the new defaults, radius if a position is active
+    applyDefaultFilters();
+    syncInputsFromState();
+    if (geo.position) { geo.radiusKm = +prefs.radiusKm || 0; els.radius.value = geo.radiusKm ? String(geo.radiusKm) : ''; }
+    applyFilters();
+    prefsDlg.close();
+  });
+  $('prefs-clear').addEventListener('click', () => {
+    localStorage.removeItem(PREFS_KEY);
+    prefs = { ...PREFS_DEFAULTS };
+    fillPrefsForm();
+  });
+  $('prefs-reset-reload').addEventListener('click', () => {
+    // Clear filters and the URL, drop the cached report so it is re-downloaded, keep preferences.
+    try { localStorage.removeItem(CACHE_KEY); } catch {}
+    location.replace(location.pathname);
+  });
+
   // ------------------------------------------------------------------ table
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -442,7 +513,6 @@
 
   // ------------------------------------------------------------- geolocation
   // Position lives only in memory for this page view: it is never stored, never put in the URL.
-  const DEFAULT_RADIUS_KM = 10;
   const geo = { position: null, approximate: false, radiusKm: 0, prevSort: null };
   let allStations = [];
   const toRad = x => x * Math.PI / 180;
@@ -459,7 +529,7 @@
     const { latitude: lat, longitude: lon, accuracy } = pos.coords;
     const first = !geo.position;
     geo.position = { lat, lon };
-    if (first) { geo.radiusKm = DEFAULT_RADIUS_KM; els.radius.value = String(DEFAULT_RADIUS_KM); } // start with a sensible radius; user can widen it
+    if (first) { geo.radiusKm = +prefs.radiusKm || 0; els.radius.value = geo.radiusKm ? String(geo.radiusKm) : ''; } // start with the preferred radius; user can change it
     geo.approximate = Number.isFinite(accuracy) && accuracy > 2000;
     for (const s of allStations) s.distance = s.lat !== null && s.lon !== null ? haversineKm(lat, lon, s.lat, s.lon) : null;
     els.nearMe.classList.add('active');
@@ -595,7 +665,9 @@
     }
     state.station = '';
     setView(state.view, false);
+    if (prefs.autoLocate && !geo.position && !autoLocated) { autoLocated = true; requestPosition(); }
   }
+  let autoLocated = false;
 
   async function refresh(force) {
     els.refresh.disabled = true;

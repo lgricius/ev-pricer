@@ -14,6 +14,10 @@ by a GitHub Actions workflow every hour and published to GitHub Pages.
   Directions buttons. The map shows exactly what the current filters select, and centers on you after "Near me".
 - **Near me**: on click only, asks the browser for your location, adds a distance column, sorts by it and filters to
   10 km by default (5/10/25/50 km or any distance selectable). The position stays in memory for the page view; it is never stored or put in the URL.
+- **Preferences** (⚙): default Near me radius, min kW, max €/kWh, connectors, AC/DC, default view, and an opt-in
+  "locate me automatically". Stored in the browser's localStorage. Defaults apply when the site is opened without
+  filter parameters; a shared link with filters always wins. Reset returns to your defaults; "Reset filters & reload"
+  clears everything, drops the cached report and reloads.
 - Filters, sorting and the open station live in the URL query string, so any view can be bookmarked or shared.
 - The browser caches the data for 15 minutes; the **Refresh** button forces a re-download.
 

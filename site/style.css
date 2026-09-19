@@ -150,6 +150,21 @@ button.secondary:hover { background: var(--bg); }
 .addr a.map:hover { text-decoration: underline; }
 .tabulator-row { cursor: pointer; }
 
+/* preferences dialog */
+dialog#prefs { border: 1px solid var(--border); border-radius: 12px; padding: 0; width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 48px); color: var(--text); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+dialog#prefs::backdrop { background: rgba(15, 23, 42, .45); }
+.prefs-body { padding: 14px 20px 20px; display: flex; flex-direction: column; gap: 12px; font-size: .9rem; }
+.pref { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--muted); }
+.pref input[type=number], .pref select { font: inherit; font-size: .95rem; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; background: #fff; max-width: 220px; }
+fieldset.pref { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; flex-direction: row; flex-wrap: wrap; gap: 6px 16px; margin: 0; }
+fieldset.pref legend { padding: 0 4px; }
+fieldset.pref label, .pref.check { flex-direction: row; align-items: center; gap: 6px; color: var(--text); font-size: .9rem; }
+.pref.check { display: flex; }
+.prefs-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+button.danger { color: #b91c1c; border-color: #fecaca; }
+button.danger:hover { background: #fef2f2; }
+#prefs-open { padding: 6px 9px; }
+
 /* station detail dialog */
 dialog#detail { border: 1px solid var(--border); border-radius: 12px; padding: 0; width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); color: var(--text); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
 dialog#detail::backdrop { background: rgba(15, 23, 42, .45); }
