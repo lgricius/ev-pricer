@@ -689,6 +689,13 @@
   }
   els.refresh.addEventListener('click', () => refresh(true));
 
+  // Footer disclaimer is collapsed on small screens; the label toggles it.
+  $('disc-toggle').addEventListener('click', () => {
+    const open = $('footer').classList.toggle('open');
+    $('disc-toggle').setAttribute('aria-expanded', String(open));
+    $('disc-toggle').querySelector('.m-only').textContent = open ? ' ▾' : ' ▸';
+  });
+
   readUrl();
   refresh(false);
 })();

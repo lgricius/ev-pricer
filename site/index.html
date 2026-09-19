@@ -135,10 +135,19 @@
     <div id="detail-body"></div>
   </dialog>
 
-  <footer>
-    <span class="m-hide">Prices are as reported by operators ("Vidutinė įkrovimo kaina"); hover a price to see the raw text.</span>
-    "Free*" means the operator reported "Nemokama" and is often limited to a venue's customers.
-    <span class="m-hide">Rebuilt hourly by GitHub Actions.</span> <a href="https://github.com/lgricius/ev-pricer" id="repo-link" target="_blank" rel="noopener">Source code</a>
+  <footer id="footer">
+    <p class="disclaimer">
+      <button type="button" id="disc-toggle" aria-expanded="false" aria-controls="disc-text"><strong>Disclaimer</strong><span class="m-only"> ▸</span></button>
+      <span id="disc-text" class="disc-text">
+        Data comes from the public report of the Lithuanian charging-point information system
+        <a href="https://ev.vialietuva.lt/" target="_blank" rel="noopener">ev.vialietuva.lt</a>, as submitted by the operators, and is refreshed hourly.
+        Prices may lag behind the operators' current tariffs, so always check the price in the charging network's app before you plug in.
+        Prices shown are the basic pay-as-you-go rates and do not include subscription plans, saving plans or loyalty discounts.
+        "Free*" means the operator reported "Nemokama" and is often limited to a venue's customers.
+        This is an independent, non-commercial project and is not affiliated with Via Lietuva or any charging network.
+      </span>
+      <a href="https://github.com/lgricius/ev-pricer" id="repo-link" target="_blank" rel="noopener">Source code</a>
+    </p>
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.5.3/dist/js/tabulator.min.js"></script>

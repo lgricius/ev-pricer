@@ -188,7 +188,10 @@ dialog#detail::backdrop { background: rgba(15, 23, 42, .45); }
 .badge.warn { background: #fef3c7; color: #92400e; }
 .num-cell { font-variant-numeric: tabular-nums; }
 
-footer { font-size: .75rem; color: var(--muted); text-align: center; }
+footer { font-size: .72rem; color: var(--muted); text-align: center; line-height: 1.45; }
+footer .disclaimer { margin: 0; max-width: 1100px; margin-inline: auto; }
+#disc-toggle { all: unset; color: inherit; cursor: default; }
+#disc-toggle strong::after { content: '.'; }
 
 @media (max-width: 720px) {
   body { padding: 8px; gap: 8px; }
@@ -216,5 +219,10 @@ footer { font-size: .75rem; color: var(--muted); text-align: center; }
   .m-hide { display: none; }
   #detail-body { padding: 12px 14px 16px; }
   .points-wrap { overflow-x: auto; }
-  footer { font-size: .68rem; }
+  footer { font-size: .66rem; line-height: 1.35; }
+  #disc-toggle { cursor: pointer; color: var(--accent-dark); }
+  #disc-toggle strong::after { content: ''; }
+  footer .disc-text { display: none; }
+  footer.open .disc-text { display: inline; }
+  footer.open #disc-toggle .m-only::before { content: ''; }
 }
