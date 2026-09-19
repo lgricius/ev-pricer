@@ -23,6 +23,11 @@ body {
 }
 .m-only { display: none; }
 .hidden { display: none !important; }
+.view-switch { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.view-switch button { border: 0; border-radius: 0; background: #fff; color: var(--text); padding: 5px 12px; }
+.view-switch button + button { border-left: 1px solid var(--border); }
+.view-switch button.on { background: var(--accent); color: #fff; }
+.view-switch button:not(.on):hover { background: var(--bg); }
 .geo { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
 .geo select { font: inherit; font-size: .8rem; padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--text); }
 #near-me.active { border-color: var(--accent); color: var(--accent-dark); font-weight: 600; background: #f0fdf4; }
@@ -80,6 +85,35 @@ button.secondary:hover { background: var(--bg); }
 #filters-toggle.active { border-color: var(--accent); color: var(--accent-dark); font-weight: 600; }
 #count { font-weight: 600; color: var(--text); }
 
+#map {
+  flex: 1 1 auto;
+  min-height: 160px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #e5e7eb;
+  overflow: hidden;
+  z-index: 0;
+}
+.map-legend { background: rgba(255,255,255,.92); padding: 6px 10px; border-radius: 6px; font-size: .75rem; line-height: 1.5; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+.map-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.map-legend .lg-note { color: var(--muted); font-size: .7rem; }
+/* price pill for a single station */
+.pm { position: absolute; transform: translate(-50%, -50%); padding: 2px 7px; border-radius: 999px; color: #fff; font-size: .74rem; font-weight: 700; line-height: 1.3; white-space: nowrap; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.45); cursor: pointer; }
+.leaflet-marker-icon:hover .pm { filter: brightness(1.15); }
+/* cluster: count + median price */
+.pc { width: 46px; height: 46px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; border: 3px solid rgba(255,255,255,.9); box-shadow: 0 1px 5px rgba(0,0,0,.45); font-size: .85rem; font-weight: 700; line-height: 1; cursor: pointer; }
+.pc small { font-size: .58rem; font-weight: 600; opacity: .95; margin-top: 3px; letter-spacing: .01em; }
+.map-popup { font-size: .85rem; line-height: 1.4; min-width: 200px; }
+.map-popup .t { font-weight: 600; margin-bottom: 2px; }
+.map-popup .s { color: var(--muted); font-size: .78rem; }
+.map-popup .row { margin: 6px 0; }
+.map-popup .actions { display: flex; gap: 6px; margin-top: 8px; }
+.map-popup .actions a, .map-popup .actions button { font: inherit; font-size: .78rem; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: #fff; color: var(--text); text-decoration: none; cursor: pointer; }
+.map-popup .actions button { background: var(--accent); border-color: var(--accent-dark); color: #fff; }
+.leaflet-container { font-family: inherit; }
+.leaflet-popup-content { margin: 10px 12px; }
+.user-dot { width: 14px; height: 14px; border-radius: 50%; background: #2563eb; border: 3px solid #fff; box-shadow: 0 0 0 2px #2563eb, 0 0 12px rgba(37,99,235,.6); }
+.map-loading { display: grid; place-items: center; height: 100%; color: var(--muted); font-size: .9rem; }
 #table {
   flex: 1 1 auto;
   min-height: 160px;
@@ -150,6 +184,10 @@ footer { font-size: .75rem; color: var(--muted); text-align: center; }
   .m-only { display: inline; }
   .meta { row-gap: 6px; }
   .geo { margin-left: 0; order: 3; flex-basis: 100%; }
+  .view-switch button { padding: 5px 10px; font-size: .8rem; }
+  .map-legend { font-size: .66rem; padding: 4px 8px; line-height: 1.4; }
+  .map-legend .lg-note { display: none; }
+  .pm { font-size: .7rem; padding: 2px 6px; }
   .filters { display: none; }
   .filters.open { display: flex; }
   .filters label { min-width: 0; flex: 1 1 45%; }

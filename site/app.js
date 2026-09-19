@@ -15,6 +15,7 @@
     kw: $('f-kw'), price: $('f-price'), q: $('f-q'), source: $('source-link'),
     filters: $('filters'), filtersToggle: $('filters-toggle'),
     nearMe: $('near-me'), radius: $('f-radius'), geoStatus: $('geo-status'), geoClear: $('geo-clear'),
+    table: $('table'), map: $('map'), viewList: $('view-list'), viewMap: $('view-map'),
   };
 
   const fmtPrice = new Intl.NumberFormat('en', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
@@ -82,7 +83,7 @@
   setInterval(renderStatus, 30_000);
 
   // -------------------------------------------------------------- URL state
-  const state = { city: [], network: [], type: [], current: [], kw: '', price: '', q: '', sort: [], station: '' };
+  const state = { city: [], network: [], type: [], current: [], kw: '', price: '', q: '', sort: [], station: '', view: 'list' };
   const LIST_KEYS = ['city', 'network', 'type', 'current'];
 
   function readUrl() {
@@ -92,6 +93,7 @@
     state.price = p.get('price') ?? '';
     state.q = p.get('q') ?? '';
     state.station = p.get('station') ?? '';
+    state.view = p.get('view') === 'map' ? 'map' : 'list';
     state.sort = (p.get('sort') ?? '').split(',').filter(Boolean).map(s => {
       const [column, dir = 'asc'] = s.split(':');
       return { column, dir: dir === 'desc' ? 'desc' : 'asc' };
@@ -106,6 +108,7 @@
     const shareableSort = state.sort.filter(s => s.column !== 'distance');
     if (shareableSort.length) p.set('sort', shareableSort.map(s => `${s.column}:${s.dir}`).join(','));
     if (typeof openStationId === 'string' && openStationId) p.set('station', openStationId);
+    if (state.view === 'map') p.set('view', 'map');
     const qs = p.toString();
     const url = location.pathname + (qs ? '?' + qs : '') + location.hash;
     if (url !== location.pathname + location.search + location.hash) history.replaceState(null, '', url);
@@ -170,6 +173,7 @@
     writeUrl();
     updateFilterToggle();
     if (table) table.setFilter(rowMatches);
+    if (state.view === 'map') mapView.update(true);
   }
 
   function syncInputsFromState() {
@@ -197,10 +201,145 @@
   });
   window.addEventListener('popstate', () => {
     readUrl();
+    setView(state.view, false);
     syncInputsFromState();
     if (table) table.setSort(sortersFor(state.sort));
     applyFilters();
   });
+
+  // -------------------------------------------------------------------- map
+  // Leaflet + OpenStreetMap tiles, loaded on demand the first time the map is opened.
+  const LEAFLET = {
+    css: ['https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css',
+      'https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/MarkerCluster.css',
+      'https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css'],
+    js: ['https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+      'https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js'],
+  };
+  const LT_BOUNDS = [[53.85, 20.9], [56.5, 26.9]];
+  const tierColor = v => v === null ? '#6b7280' : v <= 0.30 ? '#15803d' : v <= 0.45 ? '#d97706' : '#b91c1c';
+  const priceColor = s => tierColor(s.priceMin);
+  // short label for the map pill: "Free", "0.29", "0.30+" (several prices), "n/a"
+  const pillLabel = s => s.free && s.priceMax === 0 ? 'Free' : s.priceMin === null ? 'n/a' : fmtPrice.format(s.priceMin) + (s.priceMax > s.priceMin ? '+' : '');
+  const median = arr => { if (!arr.length) return null; const a = [...arr].sort((x, y) => x - y); const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+  const priceLabel = s => s.free && s.priceMax === 0 ? 'Free*' : s.priceMin === null ? 'price n/a' : (s.priceMin === s.priceMax ? fmtPrice.format(s.priceMin) : `${fmtPrice.format(s.priceMin)}–${fmtPrice.format(s.priceMax)}`) + ' €/kWh';
+
+  const mapView = (() => {
+    let loading = null, map = null, cluster = null, userMarker = null, fitted = false;
+    const loadAsset = (url, kind) => new Promise((resolve, reject) => {
+      const el = kind === 'css' ? Object.assign(document.createElement('link'), { rel: 'stylesheet', href: url }) : Object.assign(document.createElement('script'), { src: url });
+      el.onload = resolve; el.onerror = () => reject(new Error(`Failed to load ${url}`));
+      document.head.appendChild(el);
+    });
+    async function load() {
+      if (window.L?.markerClusterGroup) return;
+      loading ??= (async () => {
+        await Promise.all(LEAFLET.css.map(u => loadAsset(u, 'css')));
+        for (const u of LEAFLET.js) await loadAsset(u, 'js'); // markercluster needs L first
+      })();
+      await loading;
+    }
+    function popupHtml(s) {
+      const dist = geo.position && s.distance !== null ? ` · ${s.distance < 1 ? `${Math.round(s.distance * 1000)} m` : `${fmtKm.format(s.distance)} km`}` : '';
+      return `<div class="map-popup">
+        <div class="t">${esc(s.address)}</div>
+        <div class="s">${esc([s.network, s.city].filter(Boolean).join(' · '))}${dist}</div>
+        <div class="row">${chips(s.types)}${chips(s.current)}</div>
+        <div class="row"><b>${fmtInt.format(s.maxPower)} kW</b> · ${s.stalls} stall${s.stalls === 1 ? '' : 's'} · <b style="color:${priceColor(s)}">${esc(priceLabel(s))}</b></div>
+        <div class="actions"><button type="button" data-detail="${esc(s.id)}">Details</button><a href="${directionsUrl(s)}" target="_blank" rel="noopener">Directions</a></div>
+      </div>`;
+    }
+    function ensureMap() {
+      if (map) return;
+      els.map.innerHTML = '';
+      map = L.map(els.map, { zoomControl: true, attributionControl: true });
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors' }).addTo(map);
+      cluster = L.markerClusterGroup({
+        chunkedLoading: true, spiderfyOnMaxZoom: true, showCoverageOnHover: false, zoomToBoundsOnClick: true,
+        // wide grouping when zoomed out; at street level only stations on (almost) the same spot group, and a click fans them out
+        maxClusterRadius: zoom => (zoom >= 15 ? 22 : 60),
+        iconCreateFunction: c => {
+          const prices = c.getAllChildMarkers().map(m => m.station?.priceMin).filter(v => v !== null && v !== undefined);
+          const med = median(prices);
+          return L.divIcon({ className: '', iconSize: [46, 46], html: `<div class="pc" style="background:${tierColor(med)}"><b>${c.getChildCount()}</b><small>${med === null ? 'n/a' : '~' + fmtPrice.format(med)}</small></div>` });
+        },
+      });
+      map.addLayer(cluster);
+      const legend = L.control({ position: 'bottomleft' });
+      legend.onAdd = () => {
+        const d = L.DomUtil.create('div', 'map-legend');
+        d.innerHTML = '<b>€/kWh on each marker</b><br><i style="background:#15803d"></i>≤ 0.30 or free<br><i style="background:#d97706"></i>0.31 – 0.45<br><i style="background:#b91c1c"></i>&gt; 0.45<br><i style="background:#6b7280"></i>not reported<br><span class="lg-note">Groups show count and median price</span>';
+        return d;
+      };
+      legend.addTo(map);
+      map.fitBounds(LT_BOUNDS);
+      els.map.addEventListener('click', e => {
+        const b = e.target.closest('[data-detail]');
+        if (!b) return;
+        const st = allStations.find(x => x.id === b.dataset.detail);
+        if (st) openDetail(st);
+      });
+    }
+    function update(refit = false) {
+      if (!map) return;
+      const visible = allStations.filter(s => s.lat !== null && s.lon !== null && rowMatches(s));
+      cluster.clearLayers();
+      const markers = visible.map(s => {
+        const m = L.marker([s.lat, s.lon], {
+          icon: L.divIcon({ className: '', iconSize: [0, 0], iconAnchor: [0, 0], popupAnchor: [0, -14], html: `<div class="pm" style="background:${priceColor(s)}">${esc(pillLabel(s))}</div>` }),
+          title: `${s.address} · ${priceLabel(s)}`,
+        }).bindPopup(() => popupHtml(s), { maxWidth: 320 });
+        m.station = s;
+        return m;
+      });
+      cluster.addLayers(markers);
+      if (refit || !fitted) {
+        if (geo.position) map.setView([geo.position.lat, geo.position.lon], geo.radiusKm ? (geo.radiusKm <= 5 ? 13 : geo.radiusKm <= 10 ? 12 : geo.radiusKm <= 25 ? 11 : 10) : 13);
+        else if (visible.length) map.fitBounds(cluster.getBounds().pad(0.05), { maxZoom: 15 });
+        else map.fitBounds(LT_BOUNDS);
+        fitted = true;
+      }
+    }
+    function onPosition() {
+      if (!map) return;
+      if (userMarker) { map.removeLayer(userMarker); userMarker = null; }
+      if (geo.position) {
+        userMarker = L.marker([geo.position.lat, geo.position.lon], { icon: L.divIcon({ className: '', html: '<div class="user-dot" title="You are here"></div>', iconSize: [14, 14], iconAnchor: [7, 7] }), interactive: false, zIndexOffset: 1000 }).addTo(map);
+      }
+      if (state.view === 'map') update(true);
+    }
+    async function show() {
+      els.map.classList.remove('hidden');
+      els.table.classList.add('hidden');
+      if (!map) {
+        els.map.innerHTML = '<div class="map-loading">Loading map…</div>';
+        try { await load(); }
+        catch (e) { els.map.innerHTML = `<div class="map-loading">Map could not be loaded (${esc(e.message)}).</div>`; return; }
+        ensureMap();
+        onPosition();
+      }
+      map.invalidateSize();
+      update(false);
+    }
+    function hide() {
+      els.map.classList.add('hidden');
+      els.table.classList.remove('hidden');
+      if (table) table.redraw(true);
+    }
+    return { show, hide, update, onPosition };
+  })();
+
+  function setView(view, fromUser = true) {
+    state.view = view === 'map' ? 'map' : 'list';
+    els.viewList.classList.toggle('on', state.view === 'list');
+    els.viewMap.classList.toggle('on', state.view === 'map');
+    els.viewList.setAttribute('aria-selected', String(state.view === 'list'));
+    els.viewMap.setAttribute('aria-selected', String(state.view === 'map'));
+    if (fromUser) writeUrl();
+    if (state.view === 'map') mapView.show(); else mapView.hide();
+  }
+  els.viewList.addEventListener('click', () => setView('list'));
+  els.viewMap.addEventListener('click', () => setView('map'));
 
   // ------------------------------------------------------------------ table
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -308,6 +447,7 @@
       table.setSort([{ column: 'distance', dir: 'asc' }]);
       table.setFilter(rowMatches);
     }
+    mapView.onPosition();
   }
   function clearPosition() {
     geo.position = null; geo.approximate = false; geo.radiusKm = 0;
@@ -325,6 +465,7 @@
       table.setFilter(rowMatches);
     }
     geo.prevSort = null;
+    mapView.onPosition();
   }
   function requestPosition() {
     if (!('geolocation' in navigator)) { setGeoStatus('Your browser does not support location.', true); return; }
@@ -344,7 +485,7 @@
   }
   els.nearMe.addEventListener('click', requestPosition); // re-clicking refreshes the position
   els.geoClear.addEventListener('click', clearPosition);
-  els.radius.addEventListener('change', () => { geo.radiusKm = parseFloat(els.radius.value) || 0; if (table) table.setFilter(rowMatches); });
+  els.radius.addEventListener('change', () => { geo.radiusKm = parseFloat(els.radius.value) || 0; if (table) table.setFilter(rowMatches); if (state.view === 'map') mapView.update(true); });
 
   const chipFormatter = cell => cell.getValue().map(t => `<span class="chip ${t === 'DC' ? 'dc' : t === 'AC' ? 'ac' : ''}">${esc(t)}</span>`).join('');
 
@@ -425,6 +566,7 @@
       if (s) openDetail(s);
     }
     state.station = '';
+    setView(state.view, false);
   }
 
   async function refresh(force) {
