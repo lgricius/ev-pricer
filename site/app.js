@@ -173,7 +173,7 @@
     writeUrl();
     updateFilterToggle();
     if (table) table.setFilter(rowMatches);
-    if (state.view === 'map') mapView.update(true);
+    if (state.view === 'map') mapView.update('auto');
   }
 
   function syncInputsFromState() {
@@ -280,6 +280,7 @@
         if (st) openDetail(st);
       });
     }
+    // refit: true = always re-center; 'auto' = only when none of the results are in the current view
     function update(refit = false) {
       if (!map) return;
       const visible = allStations.filter(s => s.lat !== null && s.lon !== null && rowMatches(s));
@@ -293,10 +294,22 @@
         return m;
       });
       cluster.addLayers(markers);
-      if (refit || !fitted) {
-        if (geo.position) map.setView([geo.position.lat, geo.position.lon], geo.radiusKm ? (geo.radiusKm <= 5 ? 13 : geo.radiusKm <= 10 ? 12 : geo.radiusKm <= 25 ? 11 : 10) : 13);
+      let doFit = refit === true || !fitted;
+      if (refit === 'auto' && fitted && visible.length) {
+        // Re-center when results left the current view, or when they occupy only a small corner of it
+        // (e.g. picking a city from the country-wide view). Otherwise leave the user's pan/zoom alone.
+        const b = map.getBounds();
+        const rb = cluster.getBounds();
+        const outside = !visible.some(s => b.contains([s.lat, s.lon]));
+        const spanLat = (rb.getNorth() - rb.getSouth()) / (b.getNorth() - b.getSouth());
+        const spanLng = (rb.getEast() - rb.getWest()) / (b.getEast() - b.getWest());
+        const tiny = spanLat < 0.25 && spanLng < 0.25 && map.getZoom() < 15;
+        doFit = outside || tiny;
+      }
+      if (doFit) {
+        if (geo.position && (refit === true || !fitted)) map.setView([geo.position.lat, geo.position.lon], geo.radiusKm ? (geo.radiusKm <= 5 ? 13 : geo.radiusKm <= 10 ? 12 : geo.radiusKm <= 25 ? 11 : 10) : 13);
         else if (visible.length) map.fitBounds(cluster.getBounds().pad(0.05), { maxZoom: 15 });
-        else map.fitBounds(LT_BOUNDS);
+        else if (!geo.position) map.fitBounds(LT_BOUNDS);
         fitted = true;
       }
     }
@@ -322,9 +335,12 @@
       update(false);
     }
     function hide() {
+      const wasHidden = els.table.classList.contains('hidden');
       els.map.classList.add('hidden');
       els.table.classList.remove('hidden');
-      if (table) table.redraw(true);
+      // Only redraw when the table was actually hidden (coming back from the map). Redrawing during the
+      // initial build throws inside Tabulator's responsive layout on narrow screens.
+      if (table && wasHidden) table.redraw(true);
     }
     return { show, hide, update, onPosition };
   })();
@@ -503,13 +519,13 @@
   const columns = [
     { title: 'City', field: 'city', width: 150, sorter: textSorter, cssClass: 'wrap', responsive: 3 },
     { title: 'Network', field: 'network', width: 150, sorter: textSorter, responsive: 4 },
-    { title: 'Address', field: 'address', minWidth: 160, widthGrow: 3, formatter: addressFormatter, sorter: textSorter, responsive: 0 },
+    { title: 'Address', field: 'address', minWidth: 150, widthGrow: 3, formatter: addressFormatter, sorter: textSorter, responsive: 0 },
     { title: 'Connectors', field: 'types', width: 190, headerSort: false, formatter: chipFormatter, cssClass: 'chips', variableHeight: true, responsive: 6 },
     { title: 'AC/DC', field: 'current', width: 90, headerSort: false, formatter: chipFormatter, cssClass: 'chips', responsive: 5 },
     { title: 'kW', field: 'maxPower', width: 80, headerTooltip: 'Maximum power of the station (kW)', hozAlign: 'right', sorter: 'number', cssClass: 'num-cell', formatter: c => fmtInt.format(c.getValue()), responsive: 1 },
     { title: 'Stalls', field: 'stalls', width: 90, hozAlign: 'right', sorter: 'number', cssClass: 'num-cell', responsive: 2 },
-    { title: 'km', field: 'distance', width: 80, hozAlign: 'right', sorter: 'number', sorterParams: nullsLast, formatter: distanceFormatter, cssClass: 'num-cell', responsive: 0, visible: false, headerTooltip: 'Straight-line distance from your location' },
-    { title: '€/kWh', field: 'priceMin', width: 110, cssClass: 'wrap', hozAlign: 'right', sorter: 'number', sorterParams: nullsLast, formatter: priceFormatter, responsive: 0 },
+    { title: 'km', field: 'distance', width: 74, hozAlign: 'right', sorter: 'number', sorterParams: nullsLast, formatter: distanceFormatter, cssClass: 'num-cell', responsive: 0, visible: false, headerTooltip: 'Straight-line distance from your location' },
+    { title: '€/kWh', field: 'priceMin', width: 100, cssClass: 'wrap', hozAlign: 'right', sorter: 'number', sorterParams: nullsLast, formatter: priceFormatter, responsive: 0 },
   ];
 
   function updateCount(shownRows) {
