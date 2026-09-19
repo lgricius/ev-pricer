@@ -1,0 +1,60 @@
+name: Build & deploy to GitHub Pages
+
+on:
+  schedule:
+    - cron: '17 * * * *'   # hourly, off the top of the hour to avoid GitHub's busiest minute
+  push:
+    branches: [main]
+  workflow_dispatch:       # manual "Run workflow" button = manual cache refresh
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: write           # lets the keepalive step re-enable this workflow
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Download report
+        run: node scripts/fetch.mjs build/report.xlsx
+
+      - name: Convert report to JSON
+        run: node scripts/convert.mjs build/report.xlsx site/data.json
+
+      # Pages must be enabled once by hand (Settings -> Pages -> Source: GitHub Actions);
+      # the default GITHUB_TOKEN is not allowed to create the Pages site.
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      # GitHub disables cron workflows in public repos after 60 days without repo activity.
+      # Re-enabling the workflow on every scheduled run resets that timer without commits.
+      - name: Keep scheduled workflow alive
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/deploy.yml/enable"
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

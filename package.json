@@ -1,0 +1,16 @@
+{
+  "name": "ev-pricer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static SPA listing Lithuanian public EV chargers with prices, built from the ev.vialietuva.lt report",
+  "type": "module",
+  "scripts": {
+    "fetch": "node scripts/fetch.mjs build/report.xlsx",
+    "convert": "node scripts/convert.mjs build/report.xlsx site/data.json",
+    "build": "npm run fetch && npm run convert",
+    "dev": "python3 -m http.server 8731 --directory site"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
