@@ -13,6 +13,7 @@
     status: $('status-text'), refresh: $('refresh'), count: $('count'), reset: $('reset'),
     city: $('f-city'), network: $('f-network'), type: $('f-type'), current: $('f-current'),
     kw: $('f-kw'), price: $('f-price'), q: $('f-q'), source: $('source-link'),
+    filters: $('filters'), filtersToggle: $('filters-toggle'),
   };
 
   const fmtPrice = new Intl.NumberFormat('en', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
@@ -154,8 +155,17 @@
   }
 
   let table = null;
+  function activeFilterCount() {
+    return LIST_KEYS.reduce((n, k) => n + (state[k].length ? 1 : 0), 0) + (state.kw ? 1 : 0) + (state.price ? 1 : 0) + (state.q.trim() ? 1 : 0);
+  }
+  function updateFilterToggle() {
+    const n = activeFilterCount();
+    els.filtersToggle.textContent = n ? `Filters (${n})` : 'Filters';
+    els.filtersToggle.classList.toggle('active', n > 0);
+  }
   function applyFilters() {
     writeUrl();
+    updateFilterToggle();
     if (table) table.setFilter(rowMatches);
   }
 
@@ -177,6 +187,10 @@
     syncInputsFromState();
     if (table) table.setSort(sortersFor([]));
     applyFilters();
+  });
+  els.filtersToggle.addEventListener('click', () => {
+    const open = els.filters.classList.toggle('open');
+    els.filtersToggle.setAttribute('aria-expanded', String(open));
   });
   window.addEventListener('popstate', () => {
     readUrl();
@@ -201,7 +215,8 @@
     const s = cell.getRow().getData();
     const map = s.lat && s.lon ? `<a class="map" href="${mapsUrl(s)}" target="_blank" rel="noopener" title="Open in Google Maps">📍 Map</a>` : '';
     const tip = [s.id, s.owner && `Owner: ${s.owner}`, s.hours && `Hours: ${s.hours}`].filter(Boolean).join('\n');
-    return `<div class="addr" title="${esc(tip)}">${esc(s.address)}${map}<div class="id">${esc(s.id)}${s.hours && s.hours !== '24/7' ? ' · limited hours' : ''}</div></div>`;
+    const mobileInfo = `<span class="m-only">${esc([s.network, s.city].filter(Boolean).join(' · '))} · </span>`;
+    return `<div class="addr" title="${esc(tip)}">${esc(s.address)}${map}<div class="id">${mobileInfo}${esc(s.id)}${s.hours && s.hours !== '24/7' ? ' · limited hours' : ''}</div></div>`;
   }
   const mapsUrl = s => `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lon}`;
   const directionsUrl = s => `https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lon}`;
@@ -240,7 +255,7 @@
       </div>
       <div>${badges}</div>
       <dl class="kv">${kv}</dl>
-      <table class="points"><thead><tr><th>Charge point</th><th>Connector</th><th>Current</th><th>kW</th><th>Cable</th><th>Price</th></tr></thead><tbody>${rows}</tbody></table>`;
+      <div class="points-wrap"><table class="points"><thead><tr><th>Charge point</th><th>Connector</th><th>Current</th><th>kW</th><th>Cable</th><th>Price</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     if (!dlg.open) dlg.showModal();
     writeUrl();
   }
@@ -263,14 +278,14 @@
   // Tabulator mutates sorter objects it is given (column name -> Column object), so always hand it copies.
   const sortersFor = list => (list.length ? list : [DEFAULT_SORT]).map(s => ({ ...s }));
   const columns = [
-    { title: 'City', field: 'city', width: 150, sorter: textSorter, cssClass: 'wrap' },
-    { title: 'Network', field: 'network', width: 150, sorter: textSorter },
-    { title: 'Address', field: 'address', minWidth: 260, widthGrow: 3, formatter: addressFormatter, sorter: textSorter },
-    { title: 'Connectors', field: 'types', width: 190, headerSort: false, formatter: chipFormatter, cssClass: 'chips', variableHeight: true },
-    { title: 'AC/DC', field: 'current', width: 90, headerSort: false, formatter: chipFormatter, cssClass: 'chips' },
-    { title: 'Max kW', field: 'maxPower', width: 100, hozAlign: 'right', sorter: 'number', cssClass: 'num-cell', formatter: c => fmtInt.format(c.getValue()) },
-    { title: 'Stalls', field: 'stalls', width: 90, hozAlign: 'right', sorter: 'number', cssClass: 'num-cell' },
-    { title: '€/kWh', field: 'priceMin', width: 120, hozAlign: 'right', sorter: 'number', sorterParams: nullsLast, formatter: priceFormatter },
+    { title: 'City', field: 'city', width: 150, sorter: textSorter, cssClass: 'wrap', responsive: 3 },
+    { title: 'Network', field: 'network', width: 150, sorter: textSorter, responsive: 4 },
+    { title: 'Address', field: 'address', minWidth: 170, widthGrow: 3, formatter: addressFormatter, sorter: textSorter, responsive: 0 },
+    { title: 'Connectors', field: 'types', width: 190, headerSort: false, formatter: chipFormatter, cssClass: 'chips', variableHeight: true, responsive: 6 },
+    { title: 'AC/DC', field: 'current', width: 90, headerSort: false, formatter: chipFormatter, cssClass: 'chips', responsive: 5 },
+    { title: 'kW', field: 'maxPower', width: 90, headerTooltip: 'Maximum power of the station (kW)', hozAlign: 'right', sorter: 'number', cssClass: 'num-cell', formatter: c => fmtInt.format(c.getValue()), responsive: 1 },
+    { title: 'Stalls', field: 'stalls', width: 90, hozAlign: 'right', sorter: 'number', cssClass: 'num-cell', responsive: 2 },
+    { title: '€/kWh', field: 'priceMin', width: 120, hozAlign: 'right', sorter: 'number', sorterParams: nullsLast, formatter: priceFormatter, responsive: 0 },
   ];
 
   function updateCount(shownRows) {
@@ -286,6 +301,7 @@
       data: stations,
       columns,
       layout: 'fitColumns',
+      responsiveLayout: 'hide',
       height: '100%',
       index: 'id',
       headerSortClickElement: 'header',
@@ -317,6 +333,7 @@
     buildSelect(els.type, 'type', countBy(stations, s => s.types));
     buildSelect(els.current, 'current', countBy(stations, s => s.current));
     syncInputsFromState();
+    updateFilterToggle();
     buildTable(stations);
     if (state.station && !openStationId) {
       const s = stations.find(x => x.id === state.station);

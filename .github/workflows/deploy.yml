@@ -33,6 +33,9 @@ jobs:
       - name: Convert report to JSON
         run: node scripts/convert.mjs build/report.xlsx site/data.json
 
+      - name: Stamp asset URLs with the commit (cache busting)
+        run: sed -i "s/__BUILD__/${GITHUB_SHA::7}/g" site/index.html
+
       # Pages must be enabled once by hand (Settings -> Pages -> Source: GitHub Actions);
       # the default GITHUB_TOKEN is not allowed to create the Pages site.
       - uses: actions/configure-pages@v6
