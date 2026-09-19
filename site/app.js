@@ -161,6 +161,12 @@
   }
 
   let table = null;
+  // Tabulator builds asynchronously; calling layout methods before 'tableBuilt' throws on some devices.
+  const readyQueue = [];
+  function whenReady(fn) {
+    if (!table) return;
+    if (table.initialized) fn(); else readyQueue.push(fn);
+  }
   function activeFilterCount() {
     return LIST_KEYS.reduce((n, k) => n + (state[k].length ? 1 : 0), 0) + (state.kw ? 1 : 0) + (state.price ? 1 : 0) + (state.q.trim() ? 1 : 0);
   }
@@ -172,7 +178,7 @@
   function applyFilters() {
     writeUrl();
     updateFilterToggle();
-    if (table) table.setFilter(rowMatches);
+    whenReady(() => table.setFilter(rowMatches));
     if (state.view === 'map') mapView.update('auto');
   }
 
@@ -192,7 +198,7 @@
     state.kw = state.price = state.q = '';
     state.sort = [];
     syncInputsFromState();
-    if (table) table.setSort(geo.position ? [{ column: 'distance', dir: 'asc' }] : sortersFor([]));
+    whenReady(() => table.setSort(geo.position ? [{ column: 'distance', dir: 'asc' }] : sortersFor([])));
     applyFilters();
   });
   els.filtersToggle.addEventListener('click', () => {
@@ -203,7 +209,7 @@
     readUrl();
     setView(state.view, false);
     syncInputsFromState();
-    if (table) table.setSort(sortersFor(state.sort));
+    whenReady(() => table.setSort(sortersFor(state.sort)));
     applyFilters();
   });
 
@@ -343,7 +349,7 @@
       els.table.classList.remove('hidden');
       // Only redraw when the table was actually hidden (coming back from the map). Redrawing during the
       // initial build throws inside Tabulator's responsive layout on narrow screens.
-      if (table && wasHidden) table.redraw(true);
+      if (wasHidden) whenReady(() => table.redraw(true));
     }
     return { show, hide, update, onPosition };
   })();
@@ -461,13 +467,13 @@
     els.radius.classList.remove('hidden');
     els.geoClear.classList.remove('hidden');
     setGeoStatus(`${lat.toFixed(3)}, ${lon.toFixed(3)}${geo.approximate ? ' · approximate' : ''}`);
-    if (table) {
+    whenReady(() => {
       if (first) geo.prevSort = table.getSorters().map(x => ({ column: x.field, dir: x.dir }));
       table.showColumn('distance');
       table.redraw(true); // re-run responsive column hiding for the new column set
       table.setSort([{ column: 'distance', dir: 'asc' }]);
       table.setFilter(rowMatches);
-    }
+    });
     mapView.onPosition();
   }
   function clearPosition() {
@@ -479,12 +485,13 @@
     els.radius.classList.add('hidden');
     els.geoClear.classList.add('hidden');
     setGeoStatus('');
-    if (table) {
+    const prev = geo.prevSort;
+    whenReady(() => {
       table.hideColumn('distance');
       table.redraw(true);
-      table.setSort(sortersFor(geo.prevSort || []));
+      table.setSort(sortersFor(prev || []));
       table.setFilter(rowMatches);
-    }
+    });
     geo.prevSort = null;
     mapView.onPosition();
   }
@@ -506,7 +513,7 @@
   }
   els.nearMe.addEventListener('click', requestPosition); // re-clicking refreshes the position
   els.geoClear.addEventListener('click', clearPosition);
-  els.radius.addEventListener('change', () => { geo.radiusKm = parseFloat(els.radius.value) || 0; if (table) table.setFilter(rowMatches); if (state.view === 'map') mapView.update(true); });
+  els.radius.addEventListener('change', () => { geo.radiusKm = parseFloat(els.radius.value) || 0; whenReady(() => table.setFilter(rowMatches)); if (state.view === 'map') mapView.update(true); });
 
   const chipFormatter = cell => cell.getValue().map(t => `<span class="chip ${t === 'DC' ? 'dc' : t === 'AC' ? 'ac' : ''}">${esc(t)}</span>`).join('');
 
@@ -567,7 +574,7 @@
       writeUrl();
     });
     table.on('rowClick', (e, row) => { if (!e.target.closest('a')) openDetail(row.getData()); });
-    table.on('tableBuilt', () => { table.setFilter(rowMatches); });
+    table.on('tableBuilt', () => { table.setFilter(rowMatches); while (readyQueue.length) readyQueue.shift()(); });
   }
 
   // ------------------------------------------------------------------- boot
@@ -593,10 +600,19 @@
   async function refresh(force) {
     els.refresh.disabled = true;
     els.status.textContent = 'Loading…';
-    try { render(await loadData(force)); }
+    let result = null;
+    try { result = await loadData(force); }
     catch (e) {
-      console.error(e);
-      els.status.innerHTML = `<span class="error">Failed to load data (${esc(e.message)}). Try again later.</span>`;
+      console.error('Data load failed', e);
+      els.status.innerHTML = `<span class="error">Failed to load data (${esc(e.message)}). Check your connection and press Refresh.</span>`;
+      els.refresh.disabled = false;
+      return;
+    }
+    try { render(result); }
+    catch (e) {
+      console.error('Render failed', e);
+      statusState = null; // keep the error visible instead of letting the status ticker overwrite it
+      els.status.innerHTML = `<span class="error" title="${esc(e.stack || '')}">Display error (${esc(e.message)}). Reload the page; if it persists, please report it.</span>`;
     } finally { els.refresh.disabled = false; }
   }
   els.refresh.addEventListener('click', () => refresh(true));
