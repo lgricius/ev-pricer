@@ -225,7 +225,7 @@
   const priceLabel = s => s.free && s.priceMax === 0 ? 'Free*' : s.priceMin === null ? 'price n/a' : (s.priceMin === s.priceMax ? fmtPrice.format(s.priceMin) : `${fmtPrice.format(s.priceMin)}–${fmtPrice.format(s.priceMax)}`) + ' €/kWh';
 
   const mapView = (() => {
-    let loading = null, map = null, cluster = null, userMarker = null, fitted = false;
+    let loading = null, map = null, cluster = null, userMarker = null, fitted = false, pendingCenter = false;
     const loadAsset = (url, kind) => new Promise((resolve, reject) => {
       const el = kind === 'css' ? Object.assign(document.createElement('link'), { rel: 'stylesheet', href: url }) : Object.assign(document.createElement('script'), { src: url });
       el.onload = resolve; el.onerror = () => reject(new Error(`Failed to load ${url}`));
@@ -319,7 +319,9 @@
       if (geo.position) {
         userMarker = L.marker([geo.position.lat, geo.position.lon], { icon: L.divIcon({ className: '', html: '<div class="user-dot" title="You are here"></div>', iconSize: [14, 14], iconAnchor: [7, 7] }), interactive: false, zIndexOffset: 1000 }).addTo(map);
       }
+      // Center on the user now if the map is showing; otherwise remember to do it when the map is next opened.
       if (state.view === 'map') update(true);
+      else pendingCenter = !!geo.position;
     }
     async function show() {
       els.map.classList.remove('hidden');
@@ -332,7 +334,8 @@
         onPosition();
       }
       map.invalidateSize();
-      update(false);
+      update(pendingCenter ? true : false);
+      pendingCenter = false;
     }
     function hide() {
       const wasHidden = els.table.classList.contains('hidden');
