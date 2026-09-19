@@ -37,7 +37,7 @@ as the fetcher and cache. If a download fails, the job fails and the previously 
    `https://<you>.github.io/ev-pricer/`.
 5. To refresh the data manually, open **Actions → Build & deploy to GitHub Pages → Run workflow**.
 
-The cron runs at minute 17 of every hour. GitHub disables scheduled workflows in public repos after 60 days
+The cron runs at minute 17 of every hour from 06:00 to 23:59 Lithuanian time (`Europe/Vilnius`); nothing is pulled between midnight and 06:00. GitHub disables scheduled workflows in public repos after 60 days
 without repository activity; the workflow re-enables itself on every scheduled run to reset that timer.
 
 ## Local development

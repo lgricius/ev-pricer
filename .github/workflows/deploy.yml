@@ -2,7 +2,10 @@ name: Build & deploy to GitHub Pages
 
 on:
   schedule:
-    - cron: '17 * * * *'   # hourly, off the top of the hour to avoid GitHub's busiest minute
+    # Hourly from 06:17 to 23:17 Lithuanian time; no pulls between 00:00 and 06:00 to spare the source overnight.
+    # Minute 17 avoids GitHub's busiest minute at the top of the hour.
+    - cron: '17 6-23 * * *'
+      timezone: 'Europe/Vilnius'
   push:
     branches: [main]
   workflow_dispatch:       # manual "Run workflow" button = manual cache refresh
