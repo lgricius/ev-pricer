@@ -304,6 +304,7 @@
     if (table) {
       if (first) geo.prevSort = table.getSorters().map(x => ({ column: x.field, dir: x.dir }));
       table.showColumn('distance');
+      table.redraw(true); // re-run responsive column hiding for the new column set
       table.setSort([{ column: 'distance', dir: 'asc' }]);
       table.setFilter(rowMatches);
     }
@@ -319,6 +320,7 @@
     setGeoStatus('');
     if (table) {
       table.hideColumn('distance');
+      table.redraw(true);
       table.setSort(sortersFor(geo.prevSort || []));
       table.setFilter(rowMatches);
     }
@@ -360,13 +362,13 @@
   const columns = [
     { title: 'City', field: 'city', width: 150, sorter: textSorter, cssClass: 'wrap', responsive: 3 },
     { title: 'Network', field: 'network', width: 150, sorter: textSorter, responsive: 4 },
-    { title: 'Address', field: 'address', minWidth: 170, widthGrow: 3, formatter: addressFormatter, sorter: textSorter, responsive: 0 },
+    { title: 'Address', field: 'address', minWidth: 160, widthGrow: 3, formatter: addressFormatter, sorter: textSorter, responsive: 0 },
     { title: 'Connectors', field: 'types', width: 190, headerSort: false, formatter: chipFormatter, cssClass: 'chips', variableHeight: true, responsive: 6 },
     { title: 'AC/DC', field: 'current', width: 90, headerSort: false, formatter: chipFormatter, cssClass: 'chips', responsive: 5 },
-    { title: 'kW', field: 'maxPower', width: 90, headerTooltip: 'Maximum power of the station (kW)', hozAlign: 'right', sorter: 'number', cssClass: 'num-cell', formatter: c => fmtInt.format(c.getValue()), responsive: 1 },
+    { title: 'kW', field: 'maxPower', width: 80, headerTooltip: 'Maximum power of the station (kW)', hozAlign: 'right', sorter: 'number', cssClass: 'num-cell', formatter: c => fmtInt.format(c.getValue()), responsive: 1 },
     { title: 'Stalls', field: 'stalls', width: 90, hozAlign: 'right', sorter: 'number', cssClass: 'num-cell', responsive: 2 },
-    { title: 'km', field: 'distance', width: 90, hozAlign: 'right', sorter: 'number', sorterParams: nullsLast, formatter: distanceFormatter, cssClass: 'num-cell', responsive: 0, visible: false, headerTooltip: 'Straight-line distance from your location' },
-    { title: '€/kWh', field: 'priceMin', width: 120, hozAlign: 'right', sorter: 'number', sorterParams: nullsLast, formatter: priceFormatter, responsive: 0 },
+    { title: 'km', field: 'distance', width: 80, hozAlign: 'right', sorter: 'number', sorterParams: nullsLast, formatter: distanceFormatter, cssClass: 'num-cell', responsive: 0, visible: false, headerTooltip: 'Straight-line distance from your location' },
+    { title: '€/kWh', field: 'priceMin', width: 110, cssClass: 'wrap', hozAlign: 'right', sorter: 'number', sorterParams: nullsLast, formatter: priceFormatter, responsive: 0 },
   ];
 
   function updateCount(shownRows) {
