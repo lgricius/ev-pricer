@@ -9,6 +9,8 @@ by a GitHub Actions workflow every hour and published to GitHub Pages.
 - Multi-select filters for city, network, connector type and AC/DC, plus min power, max €/kWh and free-text search.
 - Click a row for station details: every charge point with connector, power, cable and price, opening hours,
   payment methods, owner, install date, and Google Maps / directions links.
+- **Near me**: on click only, asks the browser for your location, adds a distance column, sorts by it and offers a
+  5/10/25/50 km radius filter. The position stays in memory for the page view; it is never stored or put in the URL.
 - Filters, sorting and the open station live in the URL query string, so any view can be bookmarked or shared.
 - The browser caches the data for 15 minutes; the **Refresh** button forces a re-download.
 

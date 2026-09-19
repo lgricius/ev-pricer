@@ -49,6 +49,18 @@
 
   <div class="meta">
     <span id="count"></span>
+    <div class="geo" role="group" aria-label="Sort by distance">
+      <button id="near-me" type="button" class="secondary" title="Sort stations by distance from you. Your browser will ask for location permission; the position is kept only for this page view and never stored or shared.">📍 Near me</button>
+      <select id="f-radius" class="hidden" aria-label="Maximum distance">
+        <option value="">any distance</option>
+        <option value="5">within 5 km</option>
+        <option value="10">within 10 km</option>
+        <option value="25">within 25 km</option>
+        <option value="50">within 50 km</option>
+      </select>
+      <span id="geo-status" role="status"></span>
+      <button id="geo-clear" type="button" class="secondary hidden" title="Forget my location and remove the distance column">✕</button>
+    </div>
     <button id="filters-toggle" type="button" class="secondary m-only" aria-expanded="false" aria-controls="filters">Filters</button>
     <span class="hint">Click a row for station details and a map link. Click a column header to sort, shift-click for several columns. Filters, sorting and the open station are stored in the URL, so you can bookmark or share it.</span>
   </div>

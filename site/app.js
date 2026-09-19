@@ -14,6 +14,7 @@
     city: $('f-city'), network: $('f-network'), type: $('f-type'), current: $('f-current'),
     kw: $('f-kw'), price: $('f-price'), q: $('f-q'), source: $('source-link'),
     filters: $('filters'), filtersToggle: $('filters-toggle'),
+    nearMe: $('near-me'), radius: $('f-radius'), geoStatus: $('geo-status'), geoClear: $('geo-clear'),
   };
 
   const fmtPrice = new Intl.NumberFormat('en', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
@@ -102,7 +103,8 @@
     if (state.kw) p.set('kw', state.kw);
     if (state.price) p.set('price', state.price);
     if (state.q) p.set('q', state.q);
-    if (state.sort.length) p.set('sort', state.sort.map(s => `${s.column}:${s.dir}`).join(','));
+    const shareableSort = state.sort.filter(s => s.column !== 'distance');
+    if (shareableSort.length) p.set('sort', shareableSort.map(s => `${s.column}:${s.dir}`).join(','));
     if (typeof openStationId === 'string' && openStationId) p.set('station', openStationId);
     const qs = p.toString();
     const url = location.pathname + (qs ? '?' + qs : '') + location.hash;
@@ -151,6 +153,7 @@
       const q = norm(state.q).trim();
       if (q && !s._search.includes(q)) return false;
     }
+    if (geo.position && geo.radiusKm && (s.distance === null || s.distance > geo.radiusKm)) return false;
     return true;
   }
 
@@ -185,7 +188,7 @@
     state.kw = state.price = state.q = '';
     state.sort = [];
     syncInputsFromState();
-    if (table) table.setSort(sortersFor([]));
+    if (table) table.setSort(geo.position ? [{ column: 'distance', dir: 'asc' }] : sortersFor([]));
     applyFilters();
   });
   els.filtersToggle.addEventListener('click', () => {
@@ -246,6 +249,7 @@
       ['Price', s.prices.length ? s.prices.join(' | ') : 'not reported'],
       ['Payment', s.payment.join(', ')], ['Installed', s.installed],
       ['Coordinates', s.lat && s.lon ? `${s.lat}, ${s.lon}` : ''],
+      ['Distance from you', geo.position && s.distance !== null ? (s.distance < 1 ? `${Math.round(s.distance * 1000)} m` : `${fmtKm.format(s.distance)} km`) + ' (straight line)' : ''],
     ].filter(([, v]) => v).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
     $('detail-body').innerHTML = `
       <div class="detail-actions">
@@ -263,6 +267,82 @@
   $('detail-close').addEventListener('click', closeDetail);
   dlg.addEventListener('close', () => { if (openStationId) { openStationId = null; writeUrl(); } });
   dlg.addEventListener('click', e => { if (e.target === dlg) closeDetail(); });
+
+  const fmtKm = new Intl.NumberFormat('en', { maximumFractionDigits: 1 });
+  function distanceFormatter(cell) {
+    const d = cell.getValue();
+    if (d === null || d === undefined) return '';
+    const txt = d < 1 ? `${Math.round(d * 1000)} m` : `${fmtKm.format(d)} km`;
+    return `<span class="dist">${txt}${geo.approximate ? '<span class="approx" title="Your browser reported a rough position (accuracy worse than 2 km)"> ≈</span>' : ''}</span>`;
+  }
+
+  // ------------------------------------------------------------- geolocation
+  // Position lives only in memory for this page view: it is never stored, never put in the URL.
+  const geo = { position: null, approximate: false, radiusKm: 0, prevSort: null };
+  let allStations = [];
+  const toRad = x => x * Math.PI / 180;
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return 2 * 6371.0088 * Math.asin(Math.sqrt(a));
+  }
+  function setGeoStatus(text, isError = false) {
+    els.geoStatus.textContent = text;
+    els.geoStatus.classList.toggle('error', isError);
+  }
+  function applyPosition(pos) {
+    const { latitude: lat, longitude: lon, accuracy } = pos.coords;
+    const first = !geo.position;
+    geo.position = { lat, lon };
+    geo.approximate = Number.isFinite(accuracy) && accuracy > 2000;
+    for (const s of allStations) s.distance = s.lat !== null && s.lon !== null ? haversineKm(lat, lon, s.lat, s.lon) : null;
+    els.nearMe.classList.add('active');
+    els.nearMe.textContent = '📍 Near me ✓';
+    els.radius.classList.remove('hidden');
+    els.geoClear.classList.remove('hidden');
+    setGeoStatus(`${lat.toFixed(3)}, ${lon.toFixed(3)}${geo.approximate ? ' · approximate' : ''}`);
+    if (table) {
+      if (first) geo.prevSort = table.getSorters().map(x => ({ column: x.field, dir: x.dir }));
+      table.showColumn('distance');
+      table.setSort([{ column: 'distance', dir: 'asc' }]);
+      table.setFilter(rowMatches);
+    }
+  }
+  function clearPosition() {
+    geo.position = null; geo.approximate = false; geo.radiusKm = 0;
+    for (const s of allStations) s.distance = null;
+    els.nearMe.classList.remove('active');
+    els.nearMe.textContent = '📍 Near me';
+    els.radius.value = '';
+    els.radius.classList.add('hidden');
+    els.geoClear.classList.add('hidden');
+    setGeoStatus('');
+    if (table) {
+      table.hideColumn('distance');
+      table.setSort(sortersFor(geo.prevSort || []));
+      table.setFilter(rowMatches);
+    }
+    geo.prevSort = null;
+  }
+  function requestPosition() {
+    if (!('geolocation' in navigator)) { setGeoStatus('Your browser does not support location.', true); return; }
+    els.nearMe.disabled = true; els.nearMe.classList.add('busy'); els.nearMe.textContent = '📍 Locating…';
+    setGeoStatus('');
+    const done = () => { els.nearMe.disabled = false; els.nearMe.classList.remove('busy'); if (!geo.position) els.nearMe.textContent = '📍 Near me'; };
+    navigator.geolocation.getCurrentPosition(
+      pos => { done(); applyPosition(pos); },
+      err => {
+        done();
+        if (err.code === 1) setGeoStatus("Location blocked. Allow it for this site in your browser's settings.", true);
+        else if (err.code === 3) setGeoStatus('Could not get your location in time, try again.', true);
+        else setGeoStatus('Could not get your location, try again.', true);
+      },
+      { enableHighAccuracy: false, timeout: 12_000, maximumAge: 5 * 60_000 },
+    );
+  }
+  els.nearMe.addEventListener('click', requestPosition); // re-clicking refreshes the position
+  els.geoClear.addEventListener('click', clearPosition);
+  els.radius.addEventListener('change', () => { geo.radiusKm = parseFloat(els.radius.value) || 0; if (table) table.setFilter(rowMatches); });
 
   const chipFormatter = cell => cell.getValue().map(t => `<span class="chip ${t === 'DC' ? 'dc' : t === 'AC' ? 'ac' : ''}">${esc(t)}</span>`).join('');
 
@@ -285,6 +365,7 @@
     { title: 'AC/DC', field: 'current', width: 90, headerSort: false, formatter: chipFormatter, cssClass: 'chips', responsive: 5 },
     { title: 'kW', field: 'maxPower', width: 90, headerTooltip: 'Maximum power of the station (kW)', hozAlign: 'right', sorter: 'number', cssClass: 'num-cell', formatter: c => fmtInt.format(c.getValue()), responsive: 1 },
     { title: 'Stalls', field: 'stalls', width: 90, hozAlign: 'right', sorter: 'number', cssClass: 'num-cell', responsive: 2 },
+    { title: 'km', field: 'distance', width: 90, hozAlign: 'right', sorter: 'number', sorterParams: nullsLast, formatter: distanceFormatter, cssClass: 'num-cell', responsive: 0, visible: false, headerTooltip: 'Straight-line distance from your location' },
     { title: '€/kWh', field: 'priceMin', width: 120, hozAlign: 'right', sorter: 'number', sorterParams: nullsLast, formatter: priceFormatter, responsive: 0 },
   ];
 
@@ -295,7 +376,9 @@
   }
 
   function buildTable(stations) {
-    for (const s of stations) s._search = norm([s.address, s.id, s.owner, s.network, s.city].join(' '));
+    allStations = stations;
+    for (const s of stations) { s._search = norm([s.address, s.id, s.owner, s.network, s.city].join(' ')); s.distance = null; }
+    if (geo.position) for (const s of stations) s.distance = s.lat !== null && s.lon !== null ? haversineKm(geo.position.lat, geo.position.lon, s.lat, s.lon) : null;
     if (table) { table.replaceData(stations); return; }
     table = new Tabulator('#table', {
       data: stations,

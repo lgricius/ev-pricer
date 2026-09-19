@@ -22,6 +22,15 @@ body {
   overflow: hidden;
 }
 .m-only { display: none; }
+.hidden { display: none !important; }
+.geo { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.geo select { font: inherit; font-size: .8rem; padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--text); }
+#near-me.active { border-color: var(--accent); color: var(--accent-dark); font-weight: 600; background: #f0fdf4; }
+#near-me.busy { cursor: progress; }
+#geo-status { font-size: .75rem; color: var(--muted); }
+#geo-status.error { color: #b91c1c; }
+.dist { font-variant-numeric: tabular-nums; }
+.dist .approx { color: var(--muted); font-size: .75em; }
 a { color: var(--accent-dark); }
 h1 { font-size: 1.25rem; margin: 0; }
 .sub { margin: 2px 0 0; color: var(--muted); font-size: .85rem; }
@@ -139,6 +148,8 @@ footer { font-size: .75rem; color: var(--muted); text-align: center; }
   .top { align-items: center; }
   .status { font-size: .75rem; }
   .m-only { display: inline; }
+  .meta { row-gap: 6px; }
+  .geo { margin-left: 0; order: 3; flex-basis: 100%; }
   .filters { display: none; }
   .filters.open { display: flex; }
   .filters label { min-width: 0; flex: 1 1 45%; }
