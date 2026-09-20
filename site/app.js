@@ -166,13 +166,44 @@
     return [...m.entries()].sort((a, b) => b[1] - a[1] || collator.compare(a[0], b[0]));
   }
 
+  // Connector, AC/DC and min kW apply per charge point: a station with a 22 kW Type 2 and a 150 kW CCS point must not
+  // show the cheap AC tariff when the user asked for ≥100 kW. Each station's displayed price is recomputed from the
+  // points that pass these filters; the station passes when at least one point does.
+  function pointMatches(p) {
+    if (state.type.length && !state.type.some(t => p.types.includes(t))) return false;
+    if (state.current.length && !state.current.some(c => p.current.includes(c))) return false;
+    const kw = parseFloat(state.kw);
+    if (Number.isFinite(kw) && kw > 0 && p.power < kw) return false;
+    return true;
+  }
+  // Mirrors scripts/convert.mjs: "Nemokama" = free, otherwise every "X €/kWh" figure in the operator's price text.
+  function parseKwh(raw) {
+    const s = String(raw ?? '');
+    if (/nemokam/i.test(s)) return { kwh: [0], free: true };
+    return { kwh: [...s.matchAll(/(\d+(?:\.\d+)?)\s*(?:€|eur)?\s*\/\s*kwh/gi)].map(m => parseFloat(m[1])), free: false };
+  }
+  function recomputePrices(stations) {
+    for (const s of stations) {
+      const pts = (s.points || []).filter(pointMatches);
+      s.matched = pts.length;
+      const kwh = [], prices = new Set();
+      let free = false;
+      for (const p of pts) {
+        const r = parseKwh(p.price);
+        kwh.push(...r.kwh); free ||= r.free;
+        if (p.price) prices.add(p.price);
+      }
+      s.prices = [...prices];
+      s.priceMin = kwh.length ? Math.min(...kwh) : null;
+      s.priceMax = kwh.length ? Math.max(...kwh) : null;
+      s.free = free;
+    }
+  }
+
   function rowMatches(s) {
     if (state.city.length && !state.city.includes(s.city)) return false;
     if (state.network.length && !state.network.includes(s.network)) return false;
-    if (state.type.length && !state.type.some(t => s.types.includes(t))) return false;
-    if (state.current.length && !state.current.some(c => s.current.includes(c))) return false;
-    const kw = parseFloat(state.kw);
-    if (Number.isFinite(kw) && kw > 0 && s.maxPower < kw) return false;
+    if (!s.matched) return false;
     const price = parseFloat(state.price);
     if (Number.isFinite(price) && (s.priceMin === null || s.priceMin > price)) return false;
     if (state.q) {
@@ -201,6 +232,7 @@
   function applyFilters() {
     writeUrl();
     updateFilterToggle();
+    recomputePrices(allStations);
     whenReady(() => table.setFilter(rowMatches));
     if (state.view === 'map') mapView.update('auto');
   }
@@ -249,7 +281,6 @@
   const priceColor = s => tierColor(s.priceMin);
   // short label for the map pill: "Free", "0.29", "0.30+" (several prices), "n/a"
   const pillLabel = s => s.free && s.priceMax === 0 ? 'Free' : s.priceMin === null ? 'n/a' : fmtPrice.format(s.priceMin) + (s.priceMax > s.priceMin ? '+' : '');
-  const median = arr => { if (!arr.length) return null; const a = [...arr].sort((x, y) => x - y); const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
   const priceLabel = s => s.free && s.priceMax === 0 ? 'Free*' : s.priceMin === null ? 'price n/a' : (s.priceMin === s.priceMax ? fmtPrice.format(s.priceMin) : `${fmtPrice.format(s.priceMin)}–${fmtPrice.format(s.priceMax)}`) + ' €/kWh';
 
   const mapView = (() => {
@@ -286,17 +317,24 @@
         chunkedLoading: true, spiderfyOnMaxZoom: true, showCoverageOnHover: false, zoomToBoundsOnClick: true,
         // wide grouping when zoomed out; at street level only stations on (almost) the same spot group, and a click fans them out
         maxClusterRadius: zoom => (zoom >= 15 ? 22 : 60),
+        // Group pill: count + cheapest–dearest station price in the group. A split colour means the group mixes price tiers,
+        // so a single median would hide cheap stations next to expensive ones.
         iconCreateFunction: c => {
           const prices = c.getAllChildMarkers().map(m => m.station?.priceMin).filter(v => v !== null && v !== undefined);
-          const med = median(prices);
-          return L.divIcon({ className: '', iconSize: [46, 46], html: `<div class="pc" style="background:${tierColor(med)}"><b>${c.getChildCount()}</b><small>${med === null ? 'n/a' : '~' + fmtPrice.format(med)}</small></div>` });
+          const lo = prices.length ? Math.min(...prices) : null, hi = prices.length ? Math.max(...prices) : null;
+          const fmt = v => v === 0 ? 'Free' : fmtPrice.format(v);
+          const range = lo !== null && hi > lo;
+          const label = lo === null ? 'n/a' : range ? `${fmt(lo)}–${fmt(hi)}` : fmt(lo);
+          const bg = range && tierColor(lo) !== tierColor(hi) ? `linear-gradient(135deg, ${tierColor(lo)} 50%, ${tierColor(hi)} 50%)` : tierColor(lo);
+          const size = range ? 58 : 46;
+          return L.divIcon({ className: '', iconSize: [size, size], html: `<div class="pc${range ? ' pc-range' : ''}" style="background:${bg}"><b>${c.getChildCount()}</b><small>${label}</small></div>` });
         },
       });
       map.addLayer(cluster);
       const legend = L.control({ position: 'bottomleft' });
       legend.onAdd = () => {
         const d = L.DomUtil.create('div', 'map-legend');
-        d.innerHTML = '<b>€/kWh on each marker</b><br><i style="background:#15803d"></i>≤ 0.30 or free<br><i style="background:#d97706"></i>0.31 – 0.45<br><i style="background:#b91c1c"></i>&gt; 0.45<br><i style="background:#6b7280"></i>not reported<br><span class="lg-note">Groups show count and median price</span>';
+        d.innerHTML = '<b>€/kWh on each marker</b><br><i style="background:#15803d"></i>≤ 0.30 or free<br><i style="background:#d97706"></i>0.31 – 0.45<br><i style="background:#b91c1c"></i>&gt; 0.45<br><i style="background:#6b7280"></i>not reported<br><span class="lg-note">Groups show count and price range; split colour = mixed tiers</span>';
         return d;
       };
       legend.addTo(map);
@@ -442,7 +480,8 @@
 
   function priceFormatter(cell) {
     const s = cell.getRow().getData();
-    const title = esc(s.prices.join(' | ') || 'No price reported');
+    const subset = s.matched < s.points.length ? ` (${s.matched} of ${s.points.length} charge points match your connector / AC-DC / kW filters)` : '';
+    const title = esc((s.prices.join(' | ') || 'No price reported') + subset);
     if (s.free && s.priceMax === 0) return `<span class="price free" title="Operator reports: ${title}. Often limited to the venue's customers, check on site.">Free*</span>`;
     if (s.priceMin === null) return `<span class="price na" title="${title}">n/a</span>`;
     const range = s.priceMin === s.priceMax ? fmtPrice.format(s.priceMin) : `${fmtPrice.format(s.priceMin)}–${fmtPrice.format(s.priceMax)}`;
@@ -467,7 +506,8 @@
     openStationId = s.id;
     $('detail-title').textContent = s.address || s.id;
     $('detail-sub').textContent = [s.city, s.network, s.id].filter(Boolean).join(' · ');
-    const rows = (s.points || []).map(p => `<tr>
+    const dimmed = (s.points || []).some(p => !pointMatches(p));
+    const rows = (s.points || []).map(p => `<tr${pointMatches(p) ? '' : ' class="pt-dim" title="Does not match your connector / AC-DC / kW filters"'}>
         <td>${esc(p.id)}</td><td>${chips(p.types)}</td><td>${chips(p.current)}</td>
         <td class="num">${fmtInt.format(p.power)}</td><td>${p.cable ? 'yes' : 'no'}</td><td>${esc(p.price || 'n/a')}</td></tr>`).join('');
     const badges = [
@@ -481,7 +521,7 @@
       ['Network', s.network], ['Owner', s.owner], ['City', s.city],
       ['Opening hours', s.hours], ['Max power', `${fmtInt.format(s.maxPower)} kW`],
       ['Charge points', `${s.stalls} (${s.connectors} connector${s.connectors === 1 ? '' : 's'})`],
-      ['Price', s.prices.length ? s.prices.join(' | ') : 'not reported'],
+      ['Price', (() => { const all = [...new Set((s.points || []).map(p => p.price).filter(Boolean))]; return all.length ? all.join(' | ') : 'not reported'; })()],
       ['Payment', s.payment.join(', ')], ['Installed', s.installed],
       ['Coordinates', s.lat && s.lon ? `${s.lat}, ${s.lon}` : ''],
       ['Distance from you', geo.position && s.distance !== null ? (s.distance < 1 ? `${Math.round(s.distance * 1000)} m` : `${fmtKm.format(s.distance)} km`) + ' (straight line)' : ''],
@@ -494,7 +534,7 @@
       </div>
       <div>${badges}</div>
       <dl class="kv">${kv}</dl>
-      <div class="points-wrap"><table class="points"><thead><tr><th>Charge point</th><th>Connector</th><th>Current</th><th>kW</th><th>Cable</th><th>Price</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      <div class="points-wrap"><table class="points"><thead><tr><th>Charge point</th><th>Connector</th><th>Current</th><th>kW</th><th>Cable</th><th>Price</th></tr></thead><tbody>${rows}</tbody></table></div>${dimmed ? '<p class="pt-note">Greyed-out charge points do not match your current connector / AC-DC / kW filters; the price shown in the list is for the others.</p>' : ''}`;
     if (!dlg.open) dlg.showModal();
     writeUrl();
   }
@@ -607,7 +647,7 @@
     { title: 'kW', field: 'maxPower', width: 80, headerTooltip: 'Maximum power of the station (kW)', hozAlign: 'right', sorter: 'number', cssClass: 'num-cell', formatter: c => fmtInt.format(c.getValue()), responsive: 1 },
     { title: 'Stalls', field: 'stalls', width: 90, hozAlign: 'right', sorter: 'number', cssClass: 'num-cell', responsive: 2 },
     { title: 'km', field: 'distance', width: 74, hozAlign: 'right', sorter: 'number', sorterParams: nullsLast, formatter: distanceFormatter, cssClass: 'num-cell', responsive: 0, visible: false, headerTooltip: 'Straight-line distance from your location' },
-    { title: '€/kWh', field: 'priceMin', width: 100, cssClass: 'wrap', hozAlign: 'right', sorter: 'number', sorterParams: nullsLast, formatter: priceFormatter, responsive: 0 },
+    { title: '€/kWh', field: 'priceMin', width: 100, cssClass: 'wrap', hozAlign: 'right', sorter: 'number', sorterParams: nullsLast, formatter: priceFormatter, responsive: 0, headerTooltip: 'Price of the charge points that match the connector, AC/DC and min kW filters' },
   ];
 
   function updateCount(shownRows) {
@@ -620,6 +660,7 @@
     allStations = stations;
     for (const s of stations) { s._search = norm([s.address, s.id, s.owner, s.network, s.city].join(' ')); s.distance = null; }
     if (geo.position) for (const s of stations) s.distance = s.lat !== null && s.lon !== null ? haversineKm(geo.position.lat, geo.position.lon, s.lat, s.lon) : null;
+    recomputePrices(stations);
     if (table) { table.replaceData(stations); return; }
     table = new Tabulator('#table', {
       data: stations,

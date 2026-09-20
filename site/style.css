@@ -100,9 +100,11 @@ button.secondary:hover { background: var(--bg); }
 /* price pill for a single station */
 .pm { position: absolute; transform: translate(-50%, -50%); padding: 2px 7px; border-radius: 999px; color: #fff; font-size: .74rem; font-weight: 700; line-height: 1.3; white-space: nowrap; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.45); cursor: pointer; }
 .leaflet-marker-icon:hover .pm { filter: brightness(1.15); }
-/* cluster: count + median price */
+/* cluster: count + price range (min–max of the grouped stations) */
 .pc { width: 46px; height: 46px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; border: 3px solid rgba(255,255,255,.9); box-shadow: 0 1px 5px rgba(0,0,0,.45); font-size: .85rem; font-weight: 700; line-height: 1; cursor: pointer; }
 .pc small { font-size: .58rem; font-weight: 600; opacity: .95; margin-top: 3px; letter-spacing: .01em; }
+.pc.pc-range { width: 58px; height: 58px; }
+.pc.pc-range small { white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.45); }
 .map-popup { font-size: .85rem; line-height: 1.4; min-width: 200px; }
 .map-popup .t { font-weight: 600; margin-bottom: 2px; }
 .map-popup .s { color: var(--muted); font-size: .78rem; }
@@ -226,3 +228,6 @@ footer .disclaimer { margin: 0; max-width: 1100px; margin-inline: auto; }
   footer.open .disc-text { display: inline; }
   footer.open #disc-toggle .m-only::before { content: ''; }
 }
+/* station detail: charge points filtered out by connector / AC-DC / kW */
+.points tr.pt-dim td { opacity: .45; }
+.pt-note { color: var(--muted); font-size: .78rem; margin: 6px 0 0; }
