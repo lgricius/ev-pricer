@@ -2,9 +2,12 @@ name: Build & deploy to GitHub Pages
 
 on:
   schedule:
-    # Hourly from 06:17 to 23:17 Lithuanian time; no pulls between 00:00 and 06:00 to spare the source overnight.
-    # Minute 17 avoids GitHub's busiest minute at the top of the hour.
-    - cron: '17 6-23 * * *'
+    # GitHub runs `schedule` events best-effort and silently drops most of them for free-tier public repos
+    # (we saw ~6 of 20 hourly slots fire). So we ask four times an hour, and the `check` job below only lets
+    # a build through when the published data is older than 50 minutes: many chances, at most one pull per hour.
+    # 06:00–23:59 Lithuanian time; nothing between 00:00 and 06:00 to spare the source overnight.
+    # Minutes avoid the top of the hour, GitHub's busiest moment.
+    - cron: '3,18,33,48 6-23 * * *'
       timezone: 'Europe/Vilnius'
   push:
     branches: [main]
@@ -21,7 +24,47 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Decide whether this run should pull the source at all. Push and manual runs always build.
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      stale: ${{ steps.age.outputs.stale }}
+    steps:
+      - name: Is the published data older than 50 minutes?
+        id: age
+        env:
+          LIVE_DATA_URL: https://linas.gricius.lt/ev-pricer/data.json
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != "schedule" ]; then
+            echo "Event is '$EVENT': building unconditionally."
+            echo "stale=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # Any failure to read the live file (site down, bad JSON) counts as stale so we never get stuck.
+          age=$(curl -fsSL --max-time 30 "$LIVE_DATA_URL" | node -e '
+            let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
+              let t = NaN; try { t = Date.parse(JSON.parse(s).generatedAt); } catch {}
+              console.log(Number.isFinite(t) ? Math.round((Date.now() - t) / 60000) : 99999);
+            });' 2>/dev/null || echo 99999)
+          if [ "$age" -ge 50 ]; then
+            echo "Published data is $age min old: building."
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Published data is only $age min old: skipping this run."
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # GitHub disables cron workflows in public repos after 60 days without repo activity.
+      # Re-enabling the workflow on every scheduled run resets that timer without commits.
+      - name: Keep scheduled workflow alive
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/deploy.yml/enable"
+
   build:
+    needs: check
+    if: needs.check.outputs.stale == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -47,16 +90,8 @@ jobs:
         with:
           path: site
 
-      # GitHub disables cron workflows in public repos after 60 days without repo activity.
-      # Re-enabling the workflow on every scheduled run resets that timer without commits.
-      - name: Keep scheduled workflow alive
-        if: github.event_name == 'schedule'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/deploy.yml/enable"
-
   deploy:
-    needs: build
+    needs: build   # skipped automatically when build is skipped
     runs-on: ubuntu-latest
     environment:
       name: github-pages
