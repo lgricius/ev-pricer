@@ -336,24 +336,33 @@
         chunkedLoading: true, spiderfyOnMaxZoom: true, showCoverageOnHover: false, zoomToBoundsOnClick: true,
         // wide grouping when zoomed out; at street level only stations on (almost) the same spot group, and a click fans them out
         maxClusterRadius: zoom => (zoom >= 15 ? 22 : 60),
-        // Group pill: count + cheapest–dearest station price in the group. A split colour means the group mixes price tiers,
-        // so a single median would hide cheap stations next to expensive ones.
+        // Group pill: the colour already tells the price tier, so a same-tier group shows only its count. Only when the
+        // group mixes tiers does it grow, split its colour and spell out the cheapest–dearest range, so cheap stations
+        // are never hidden inside an expensive-looking group.
         iconCreateFunction: c => {
           const prices = c.getAllChildMarkers().map(m => m.station?.priceMin).filter(v => v !== null && v !== undefined);
           const lo = prices.length ? Math.min(...prices) : null, hi = prices.length ? Math.max(...prices) : null;
           const fmt = v => v === 0 ? 'Free' : fmtPrice.format(v);
-          const range = lo !== null && hi > lo;
-          const label = lo === null ? 'n/a' : range ? `${fmt(lo)}–${fmt(hi)}` : fmt(lo);
-          const bg = range && tierColor(lo) !== tierColor(hi) ? `linear-gradient(135deg, ${tierColor(lo)} 50%, ${tierColor(hi)} 50%)` : tierColor(lo);
-          const size = range ? 58 : 46;
-          return L.divIcon({ className: '', iconSize: [size, size], html: `<div class="pc${range ? ' pc-range' : ''}" style="background:${bg}"><b>${c.getChildCount()}</b><small>${label}</small></div>` });
+          const mixed = lo !== null && tierColor(lo) !== tierColor(hi);
+          const bg = mixed ? `linear-gradient(135deg, ${tierColor(lo)} 50%, ${tierColor(hi)} 50%)` : tierColor(lo);
+          const size = mixed ? 58 : 40;
+          return L.divIcon({ className: '', iconSize: [size, size], html: `<div class="pc${mixed ? ' pc-range' : ''}" style="background:${bg}"><b>${c.getChildCount()}</b>${mixed ? `<small>${fmt(lo)}–${fmt(hi)}</small>` : ''}</div>` });
         },
       });
       map.addLayer(cluster);
       const legend = L.control({ position: 'bottomleft' });
       legend.onAdd = () => {
         const d = L.DomUtil.create('div', 'map-legend');
-        d.innerHTML = '<b>€/kWh on each marker</b><br><i style="background:#15803d"></i>≤ 0.30 or free<br><i style="background:#d97706"></i>0.31 – 0.45<br><i style="background:#b91c1c"></i>&gt; 0.45<br><i style="background:#6b7280"></i>not reported<br><span class="lg-note">Groups show count and price range; split colour = mixed tiers</span>';
+        // On phones the legend starts collapsed to a small button so it does not cover the map.
+        d.innerHTML = '<button type="button" class="lg-toggle" aria-expanded="false">€/kWh legend ▸</button>'
+          + '<div class="lg-body"><b>€/kWh on each marker</b><br><i style="background:#15803d"></i>≤ 0.30 or free<br><i style="background:#d97706"></i>0.31 – 0.45<br><i style="background:#b91c1c"></i>&gt; 0.45<br><i style="background:#6b7280"></i>not reported<br>'
+          + '<span class="lg-note">Groups show a count; a split colour with a price range means the group mixes tiers</span></div>';
+        L.DomEvent.disableClickPropagation(d);
+        d.querySelector('.lg-toggle').addEventListener('click', e => {
+          const open = d.classList.toggle('open');
+          e.currentTarget.setAttribute('aria-expanded', String(open));
+          e.currentTarget.textContent = open ? '€/kWh legend ▾' : '€/kWh legend ▸';
+        });
         return d;
       };
       legend.addTo(map);
