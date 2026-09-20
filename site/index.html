@@ -13,7 +13,7 @@
 <body>
   <header class="top">
     <div class="brand">
-      <h1>⚡ EV chargers in Lithuania</h1>
+      <h1><a id="home" href="./" title="Show all stations: clears every filter, Near me and sorting">⚡ EV chargers in Lithuania</a></h1>
       <p class="sub">Public charging stations with price, max power and stall count. Source: <a id="source-link" href="https://ev.vialietuva.lt/" target="_blank" rel="noopener">ev.vialietuva.lt</a></p>
     </div>
     <div class="status" id="status">
@@ -38,6 +38,9 @@
     </label>
     <label class="num">Min kW
       <input id="f-kw" type="number" min="0" step="1" placeholder="0" inputmode="numeric">
+    </label>
+    <label class="num">Max kW
+      <input id="f-kw-max" type="number" min="0" step="1" placeholder="any" inputmode="numeric" title="Only charge points up to this power">
     </label>
     <label class="num">Max €/kWh
       <input id="f-price" type="number" min="0" step="0.01" placeholder="any" inputmode="decimal">
@@ -94,6 +97,9 @@
         </label>
         <label class="pref">Default min kW
           <input name="kw" type="number" min="0" step="1" placeholder="none" inputmode="numeric">
+        </label>
+        <label class="pref">Default max kW
+          <input name="kwMax" type="number" min="0" step="1" placeholder="none" inputmode="numeric">
         </label>
         <label class="pref">Default max €/kWh
           <input name="price" type="number" min="0" step="0.01" placeholder="none" inputmode="decimal">

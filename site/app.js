@@ -12,7 +12,7 @@
   const els = {
     status: $('status-text'), refresh: $('refresh'), count: $('count'), reset: $('reset'),
     city: $('f-city'), network: $('f-network'), type: $('f-type'), current: $('f-current'),
-    kw: $('f-kw'), price: $('f-price'), q: $('f-q'), source: $('source-link'),
+    kw: $('f-kw'), kwMax: $('f-kw-max'), price: $('f-price'), q: $('f-q'), source: $('source-link'),
     filters: $('filters'), filtersToggle: $('filters-toggle'),
     nearMe: $('near-me'), radius: $('f-radius'), geoStatus: $('geo-status'), geoClear: $('geo-clear'),
     table: $('table'), map: $('map'), viewList: $('view-list'), viewMap: $('view-map'),
@@ -40,7 +40,7 @@
   // ------------------------------------------------------------ preferences
   // Personal defaults, kept in this browser's localStorage (a static site has no server to read cookies).
   const PREFS_KEY = 'ev-pricer:prefs:v1';
-  const PREFS_DEFAULTS = { radiusKm: 10, kw: '', price: '', types: [], current: [], view: 'list', autoLocate: false };
+  const PREFS_DEFAULTS = { radiusKm: 10, kw: '', kwMax: '', price: '', types: [], current: [], view: 'list', autoLocate: false };
   function loadPrefs() {
     try { return { ...PREFS_DEFAULTS, ...(JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')) }; }
     catch { return { ...PREFS_DEFAULTS }; }
@@ -96,15 +96,16 @@
   setInterval(renderStatus, 30_000);
 
   // -------------------------------------------------------------- URL state
-  const state = { city: [], network: [], type: [], current: [], kw: '', price: '', q: '', sort: [], station: '', view: 'list' };
+  const state = { city: [], network: [], type: [], current: [], kw: '', kwMax: '', price: '', q: '', sort: [], station: '', view: 'list' };
   const LIST_KEYS = ['city', 'network', 'type', 'current'];
 
-  const FILTER_PARAMS = [...LIST_KEYS, 'kw', 'price', 'q'];
+  const FILTER_PARAMS = [...LIST_KEYS, 'kw', 'kwmax', 'price', 'q'];
   function readUrl() {
     const p = new URLSearchParams(location.search);
     const hasFilters = FILTER_PARAMS.some(k => p.has(k));
     for (const k of LIST_KEYS) state[k] = p.getAll(k).filter(Boolean);
     state.kw = p.get('kw') ?? '';
+    state.kwMax = p.get('kwmax') ?? '';
     state.price = p.get('price') ?? '';
     state.q = p.get('q') ?? '';
     state.station = p.get('station') ?? '';
@@ -120,12 +121,14 @@
     state.type = [...prefs.types];
     state.current = [...prefs.current];
     state.kw = prefs.kw ? String(prefs.kw) : '';
+    state.kwMax = prefs.kwMax ? String(prefs.kwMax) : '';
     state.price = prefs.price ? String(prefs.price) : '';
   }
   function writeUrl() {
     const p = new URLSearchParams();
     for (const k of LIST_KEYS) for (const v of state[k]) p.append(k, v);
     if (state.kw) p.set('kw', state.kw);
+    if (state.kwMax) p.set('kwmax', state.kwMax);
     if (state.price) p.set('price', state.price);
     if (state.q) p.set('q', state.q);
     const shareableSort = state.sort.filter(s => s.column !== 'distance');
@@ -172,8 +175,9 @@
   function pointMatches(p) {
     if (state.type.length && !state.type.some(t => p.types.includes(t))) return false;
     if (state.current.length && !state.current.some(c => p.current.includes(c))) return false;
-    const kw = parseFloat(state.kw);
+    const kw = parseFloat(state.kw), kwMax = parseFloat(state.kwMax);
     if (Number.isFinite(kw) && kw > 0 && p.power < kw) return false;
+    if (Number.isFinite(kwMax) && kwMax > 0 && p.power > kwMax) return false;
     return true;
   }
   // Mirrors scripts/convert.mjs: "Nemokama" = free, otherwise every "X €/kWh" figure in the operator's price text.
@@ -222,7 +226,7 @@
     if (table.initialized) fn(); else readyQueue.push(fn);
   }
   function activeFilterCount() {
-    return LIST_KEYS.reduce((n, k) => n + (state[k].length ? 1 : 0), 0) + (state.kw ? 1 : 0) + (state.price ? 1 : 0) + (state.q.trim() ? 1 : 0);
+    return LIST_KEYS.reduce((n, k) => n + (state[k].length ? 1 : 0), 0) + (state.kw ? 1 : 0) + (state.kwMax ? 1 : 0) + (state.price ? 1 : 0) + (state.q.trim() ? 1 : 0);
   }
   function updateFilterToggle() {
     const n = activeFilterCount();
@@ -240,12 +244,14 @@
   function syncInputsFromState() {
     for (const k of LIST_KEYS) selects[k]?.setValue(state[k], true);
     els.kw.value = state.kw;
+    els.kwMax.value = state.kwMax;
     els.price.value = state.price;
     els.q.value = state.q;
   }
 
   function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
   els.kw.addEventListener('input', debounce(() => { state.kw = els.kw.value.trim(); applyFilters(); }, 150));
+  els.kwMax.addEventListener('input', debounce(() => { state.kwMax = els.kwMax.value.trim(); applyFilters(); }, 150));
   els.price.addEventListener('input', debounce(() => { state.price = els.price.value.trim(); applyFilters(); }, 150));
   els.q.addEventListener('input', debounce(() => { state.q = els.q.value; applyFilters(); }, 150));
   els.reset.addEventListener('click', () => {
@@ -253,6 +259,19 @@
     state.sort = [];
     syncInputsFromState();
     whenReady(() => table.setSort(geo.position ? [{ column: 'distance', dir: 'asc' }] : sortersFor([])));
+    applyFilters();
+  });
+  // Title link = "show everything": unlike Reset (which returns to your preferred defaults) this clears every filter,
+  // Near me, sorting and the open station, without a page reload. Plain href works for middle-click / new tab.
+  $('home').addEventListener('click', e => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    for (const k of LIST_KEYS) state[k] = [];
+    state.kw = ''; state.kwMax = ''; state.price = ''; state.q = ''; state.sort = [];
+    if (geo.position) clearPosition();
+    if (openStationId) closeDetail();
+    syncInputsFromState();
+    whenReady(() => table.setSort(sortersFor([])));
     applyFilters();
   });
   els.filtersToggle.addEventListener('click', () => {
@@ -432,6 +451,7 @@
     const f = prefsForm.elements;
     f.radiusKm.value = String(+prefs.radiusKm || 0);
     f.kw.value = prefs.kw || '';
+    f.kwMax.value = prefs.kwMax || '';
     f.price.value = prefs.price || '';
     for (const el of prefsForm.querySelectorAll('input[name=types]')) el.checked = prefs.types.includes(el.value);
     for (const el of prefsForm.querySelectorAll('input[name=current]')) el.checked = prefs.current.includes(el.value);
@@ -443,6 +463,7 @@
     return {
       radiusKm: +f.radiusKm.value || 0,
       kw: f.kw.value.trim(),
+      kwMax: f.kwMax.value.trim(),
       price: f.price.value.trim(),
       types: [...prefsForm.querySelectorAll('input[name=types]:checked')].map(e => e.value),
       current: [...prefsForm.querySelectorAll('input[name=current]:checked')].map(e => e.value),
@@ -656,6 +677,27 @@
     els.count.textContent = shown === total ? `${fmtInt.format(total)} stations` : `${fmtInt.format(shown)} of ${fmtInt.format(total)} stations`;
   }
 
+  // Empty state: name the active filters, since a stale chip (e.g. CCS + max 22 kW) is the usual reason for zero rows.
+  function emptyPlaceholder() {
+    const parts = [];
+    if (state.city.length) parts.push(`City: ${state.city.join(', ')}`);
+    if (state.network.length) parts.push(`Network: ${state.network.join(', ')}`);
+    if (state.type.length) parts.push(`Connector: ${state.type.join(', ')}`);
+    if (state.current.length) parts.push(`Current: ${state.current.join(', ')}`);
+    if (state.kw) parts.push(`Min ${state.kw} kW`);
+    if (state.kwMax) parts.push(`Max ${state.kwMax} kW`);
+    if (state.price) parts.push(`Max ${state.price} €/kWh`);
+    if (state.q.trim()) parts.push(`Search "${state.q.trim()}"`);
+    if (geo.position && geo.radiusKm) parts.push(`Within ${geo.radiusKm} km of you`);
+    const el = document.createElement('div');
+    el.className = 'empty';
+    el.innerHTML = '<b>No stations match these filters</b>' + (parts.length
+      ? `<div class="empty-filters">${parts.map(p => `<span>${esc(p)}</span>`).join('')}</div>
+         <div class="empty-hint">Connector, AC/DC and kW must all hold for the same charge point. Clear one filter, or press Reset.</div>`
+      : '');
+    return el;
+  }
+
   function buildTable(stations) {
     allStations = stations;
     for (const s of stations) { s._search = norm([s.address, s.id, s.owner, s.network, s.city].join(' ')); s.distance = null; }
@@ -673,7 +715,7 @@
       columnHeaderSortMulti: true,
       headerSortTristate: true,
       initialSort: sortersFor(state.sort),
-      placeholder: 'No stations match these filters',
+      placeholder: emptyPlaceholder,
     });
     table.on('dataFiltered', (_filters, rows) => updateCount(rows));
     table.on('dataLoaded', () => updateCount());

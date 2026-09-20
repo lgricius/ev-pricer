@@ -6,7 +6,7 @@ max power, stall count and price. Data comes from the public report on
 by a GitHub Actions workflow every hour and published to GitHub Pages.
 
 - Sort by any column (shift-click for multi-column sort).
-- Multi-select filters for city, network, connector type and AC/DC, plus min power, max €/kWh and free-text search.
+- Multi-select filters for city, network, connector type and AC/DC, plus min and max power, max €/kWh and free-text search.
 - Click a row for station details: every charge point with connector, power, cable and price, opening hours,
   payment methods, owner, install date, and Google Maps / directions links.
 - **Map view**: List / Map toggle (`view=map` in the URL). Leaflet with OpenStreetMap tiles, loaded only when the map
@@ -14,7 +14,7 @@ by a GitHub Actions workflow every hour and published to GitHub Pages.
   Directions buttons. The map shows exactly what the current filters select, and centers on you after "Near me".
 - **Near me**: on click only, asks the browser for your location, adds a distance column, sorts by it and filters to
   10 km by default (5/10/25/50 km or any distance selectable). The position stays in memory for the page view; it is never stored or put in the URL.
-- **Preferences** (⚙): default Near me radius, min kW, max €/kWh, connectors, AC/DC, default view, and an opt-in
+- **Preferences** (⚙): default Near me radius, min and max kW, max €/kWh, connectors, AC/DC, default view, and an opt-in
   "locate me automatically". Stored in the browser's localStorage. Defaults apply when the site is opened without
   filter parameters; a shared link with filters always wins. Reset returns to your defaults; "Reset filters & reload"
   clears everything, drops the cached report and reloads.
